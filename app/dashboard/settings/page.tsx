@@ -5,6 +5,7 @@ import { getCurrentAdmin } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import ProfileInformation from "@/components/dashboard/ProfileInformation";
 import SecuritySettings from "@/components/dashboard/SecuritySettings";
+import CurrencyPreference, { isDisplayCurrency, type DisplayCurrency } from "@/components/dashboard/CurrencyPreference";
 
 export const instant = false;
 
@@ -30,9 +31,10 @@ export default async function SettingsPage() {
   if (!user) redirect("/login?next=/dashboard/settings");
   if (await getCurrentAdmin()) redirect("/admin");
 
-  const metadata = user.user_metadata as { display_name?: unknown; full_name?: unknown; name?: unknown } | undefined;
+  const metadata = user.user_metadata as { display_name?: unknown; full_name?: unknown; name?: unknown; display_currency?: unknown } | undefined;
   const displayName = [metadata?.display_name, metadata?.full_name, metadata?.name]
     .find((value): value is string => typeof value === "string" && value.trim().length > 0)?.trim() ?? null;
+  const selectedCurrency: DisplayCurrency = isDisplayCurrency(metadata?.display_currency) ? metadata.display_currency : "USD";
 
   return (
     <DashboardShell userEmail={user.email ?? "Authenticated account"} displayName={displayName}>
@@ -54,9 +56,8 @@ export default async function SettingsPage() {
           <SettingSection title="Security" description="Manage your password and active session." badge={null}>
             <SecuritySettings email={user.email ?? ""} />
           </SettingSection>
-          <SettingSection title="Account Preferences" description="Choose how supported account information will be displayed.">
-            <div className="settings-preference-row"><span>Display currency</span><strong>USD — US Dollar</strong></div>
-            <p className="settings-placeholder-copy">Currency selection and persistence will be added in a future phase.</p>
+          <SettingSection title="Account Preferences" description="Choose how supported account information will be displayed." badge={null}>
+            <CurrencyPreference initialCurrency={selectedCurrency} />
           </SettingSection>
         </div>
       </div>

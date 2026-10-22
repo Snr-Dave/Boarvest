@@ -158,7 +158,7 @@ Phase 4 Implementation Summary
 
 Phase 5: Account Preferences — Display Currency
 
-Phase 5 Planning Outline — pending implementation approval
+Phase 5 Implementation Summary
 
 - Scope: add a Display Currency selector with exactly USD (US Dollar), SOL (Solana), ETH (Ethereum), and BNB (BNB).
 - Persistence: store the authenticated user's selected display preference in an approved user-scoped location. Confirm whether Supabase Auth metadata is acceptable; otherwise propose a preferences table with RLS before making schema changes.
@@ -166,7 +166,10 @@ Phase 5 Planning Outline — pending implementation approval
 - Display conversion: convert supported USD balance and verified earned-profit values only at render time through one formatter. For SOL, ETH, and BNB, use a validated, timestamped USD-per-asset rate from an approved server-side source; never invent fallback rates or imply asset ownership.
 - Failure handling: show an explicit unavailable or stale-rate state when a rate cannot be trusted, and prevent double conversion. Portfolio conversion remains deferred until a verified portfolio data source exists.
 - Verification: test selector behavior, persistence across refresh and sessions, conversion accuracy, stale/unavailable rates, and regression safety for deposits, Transactions, ledger data, and admin access.
-- Proposed implementation areas: `app/dashboard/settings/page.tsx`, a small settings currency component, the authenticated preference persistence path, the dashboard balance/display formatter, and the existing market-price route only after its source is approved. No Phase 5 code, schema, environment, or service changes are authorized by this planning update.
+- Implemented `components/dashboard/CurrencyPreference.tsx` with exactly USD, SOL, ETH, and BNB options; the selected value persists in the authenticated user's Supabase Auth metadata as `display_currency`.
+- Implemented display-only conversion for the dashboard's canonical USD total balance through `components/dashboard/CurrencyDisplay.tsx`; ledger and financial workflows remain USD-only. The existing server-side market-price route is reused, with finite positive values and a two-minute freshness check; unavailable or stale rates show `Rate unavailable`.
+- Earned profit and portfolio values remain unchanged because the current profit and portfolio values are placeholders, not verified USD data sources.
+- Phase 5 status: implemented with outstanding verification. No schema, environment, deposit, Transactions, or admin-dashboard changes were made.
 
 The available display currency options must be:
 
@@ -178,15 +181,15 @@ The available display currency options must be:
 
 - BNB — BNB
 
-- [ ] Add a Display Currency selector.
+- [x] Add a Display Currency selector with exactly USD, SOL, ETH, and BNB.
 
-- [ ] Use USD as the underlying accounting currency.
+- [x] Use USD as the underlying accounting currency.
 
-- [ ] Persist the user's selected display currency across sessions.
+- [x] Persist the user's selected display currency across sessions through authenticated Supabase Auth metadata.
 
-- [ ] Update supported dashboard balance displays to reflect the selected currency.
+- [x] Update the supported dashboard total balance display to reflect the selected currency at render time.
 
-- [ ] Update supported earned-profit displays to reflect the selected currency.
+- [ ] Update supported earned-profit displays to reflect the selected currency; deferred because the current value is an unverified placeholder.
 
 - [ ] Ensure portfolio values use the selected display currency when the portfolio integration is implemented.
 
@@ -196,11 +199,11 @@ The available display currency options must be:
 
 - [ ] Do not imply that displaying a SOL, ETH, or BNB equivalent means the user owns that cryptocurrency.
 
-- [ ] Inspect for an existing approved exchange-rate source before proposing a new one.
+- [x] Inspect and reuse the existing exchange-rate source (`app/api/market-prices/route.ts`).
 
-- [ ] Never invent live rates or present mock rates as real market prices.
+- [x] Never invent live rates or present mock rates as real market prices.
 
-- [ ] If no reliable rate source exists, document the limitation and propose the safest next step before implementation.
+- [x] Show an unavailable state for missing, invalid, or stale rates.
 
 Phase 6: Account Actions — Deferred
 
