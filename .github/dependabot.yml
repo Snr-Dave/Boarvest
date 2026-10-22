@@ -10,3 +10,7 @@ updates:
     labels:
       - "dependencies"
       - "automated"
+    ignore:
+      - dependency-name: "typescript"
+        versions: [">= 7.0.0"]
+        
