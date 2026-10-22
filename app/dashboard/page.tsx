@@ -4,7 +4,13 @@ import DashboardShell from "@/components/dashboard/DashboardShell";
 import { getCurrentAdmin } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import CurrencyDisplay from "@/components/dashboard/CurrencyDisplay";
-import { isDisplayCurrency, type DisplayCurrency } from "@/components/dashboard/CurrencyPreference";
+import type { DisplayCurrency } from "@/components/dashboard/CurrencyPreference";
+
+const DISPLAY_CURRENCY_CODES: readonly DisplayCurrency[] = ["USD", "SOL", "ETH", "BNB"];
+
+function isDisplayCurrency(value: unknown): value is DisplayCurrency {
+  return typeof value === "string" && DISPLAY_CURRENCY_CODES.includes(value as DisplayCurrency);
+}
 
 export const instant = false;
 
