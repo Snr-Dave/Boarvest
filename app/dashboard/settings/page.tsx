@@ -51,7 +51,7 @@ export default async function SettingsPage() {
               createdAt={user.created_at ?? null}
             />
           </SettingSection>
-          <SettingSection title="Security" description="Manage your password and active session.">
+          <SettingSection title="Security" description="Manage your password and active session." badge={null}>
             <SecuritySettings email={user.email ?? ""} />
           </SettingSection>
           <SettingSection title="Account Preferences" description="Choose how supported account information will be displayed.">
