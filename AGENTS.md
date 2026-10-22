@@ -158,6 +158,16 @@ Phase 4 Implementation Summary
 
 Phase 5: Account Preferences — Display Currency
 
+Phase 5 Planning Outline — pending implementation approval
+
+- Scope: add a Display Currency selector with exactly USD (US Dollar), SOL (Solana), ETH (Ethereum), and BNB (BNB).
+- Persistence: store the authenticated user's selected display preference in an approved user-scoped location. Confirm whether Supabase Auth metadata is acceptable; otherwise propose a preferences table with RLS before making schema changes.
+- Accounting model: retain USD as the canonical accounting currency. Do not modify ledger, deposit, transaction, balance, or investment records.
+- Display conversion: convert supported USD balance and verified earned-profit values only at render time through one formatter. For SOL, ETH, and BNB, use a validated, timestamped USD-per-asset rate from an approved server-side source; never invent fallback rates or imply asset ownership.
+- Failure handling: show an explicit unavailable or stale-rate state when a rate cannot be trusted, and prevent double conversion. Portfolio conversion remains deferred until a verified portfolio data source exists.
+- Verification: test selector behavior, persistence across refresh and sessions, conversion accuracy, stale/unavailable rates, and regression safety for deposits, Transactions, ledger data, and admin access.
+- Proposed implementation areas: `app/dashboard/settings/page.tsx`, a small settings currency component, the authenticated preference persistence path, the dashboard balance/display formatter, and the existing market-price route only after its source is approved. No Phase 5 code, schema, environment, or service changes are authorized by this planning update.
+
 The available display currency options must be:
 
 - USD — US Dollar
