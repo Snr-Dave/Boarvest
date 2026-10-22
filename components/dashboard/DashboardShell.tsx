@@ -21,7 +21,7 @@ const navigation = [
 ];
 
 const secondaryNavigation = [
-  { label: "Account Settings", href: "/dashboard/settings", icon: "⚙" },
+  { label: "Settings", href: "/dashboard/settings", icon: "⚙" },
   { label: "Help & Support", href: "/dashboard/help", icon: "?" },
 ];
 
