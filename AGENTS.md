@@ -21,7 +21,7 @@ Stack
 
 Current Task: User Dashboard Settings
 
-Branch: "feat:settings"
+Branch: "feat/settings-security"
 
 Current Mode: Planning and documentation only.
 
@@ -158,6 +158,19 @@ Phase 4 Implementation Summary
 
 Phase 5: Account Preferences — Display Currency
 
+Phase 5 Implementation Summary
+
+- Scope: add a Display Currency selector with exactly USD (US Dollar), SOL (Solana), ETH (Ethereum), and BNB (BNB).
+- Persistence: store the authenticated user's selected display preference in an approved user-scoped location. Confirm whether Supabase Auth metadata is acceptable; otherwise propose a preferences table with RLS before making schema changes.
+- Accounting model: retain USD as the canonical accounting currency. Do not modify ledger, deposit, transaction, balance, or investment records.
+- Display conversion: convert supported USD balance and verified earned-profit values only at render time through one formatter. For SOL, ETH, and BNB, use a validated, timestamped USD-per-asset rate from an approved server-side source; never invent fallback rates or imply asset ownership.
+- Failure handling: show an explicit unavailable or stale-rate state when a rate cannot be trusted, and prevent double conversion. Portfolio conversion remains deferred until a verified portfolio data source exists.
+- Verification: test selector behavior, persistence across refresh and sessions, conversion accuracy, stale/unavailable rates, and regression safety for deposits, Transactions, ledger data, and admin access.
+- Implemented `components/dashboard/CurrencyPreference.tsx` with exactly USD, SOL, ETH, and BNB options; the selected value persists in the authenticated user's Supabase Auth metadata as `display_currency`.
+- Implemented display-only conversion for the dashboard's canonical USD total balance through `components/dashboard/CurrencyDisplay.tsx`; ledger and financial workflows remain USD-only. The existing server-side market-price route is reused, with finite positive values and a two-minute freshness check; unavailable or stale rates show `Rate unavailable`.
+- Earned profit and portfolio values remain unchanged because the current profit and portfolio values are placeholders, not verified USD data sources.
+- Phase 5 status: implemented with outstanding verification. No schema, environment, deposit, Transactions, or admin-dashboard changes were made.
+
 The available display currency options must be:
 
 - USD — US Dollar
@@ -168,15 +181,15 @@ The available display currency options must be:
 
 - BNB — BNB
 
-- [ ] Add a Display Currency selector.
+- [x] Add a Display Currency selector with exactly USD, SOL, ETH, and BNB.
 
-- [ ] Use USD as the underlying accounting currency.
+- [x] Use USD as the underlying accounting currency.
 
-- [ ] Persist the user's selected display currency across sessions.
+- [x] Persist the user's selected display currency across sessions through authenticated Supabase Auth metadata.
 
-- [ ] Update supported dashboard balance displays to reflect the selected currency.
+- [x] Update the supported dashboard total balance display to reflect the selected currency at render time.
 
-- [ ] Update supported earned-profit displays to reflect the selected currency.
+- [ ] Update supported earned-profit displays to reflect the selected currency; deferred because the current value is an unverified placeholder.
 
 - [ ] Ensure portfolio values use the selected display currency when the portfolio integration is implemented.
 
@@ -186,11 +199,11 @@ The available display currency options must be:
 
 - [ ] Do not imply that displaying a SOL, ETH, or BNB equivalent means the user owns that cryptocurrency.
 
-- [ ] Inspect for an existing approved exchange-rate source before proposing a new one.
+- [x] Inspect and reuse the existing exchange-rate source (`app/api/market-prices/route.ts`).
 
-- [ ] Never invent live rates or present mock rates as real market prices.
+- [x] Never invent live rates or present mock rates as real market prices.
 
-- [ ] If no reliable rate source exists, document the limitation and propose the safest next step before implementation.
+- [x] Show an unavailable state for missing, invalid, or stale rates.
 
 Phase 6: Account Actions — Deferred
 
@@ -272,3 +285,60 @@ PR Expectations
 - Document changes to environment variables, database schema, or authentication behaviour.
 - Preserve working deposit, Transactions, and admin functionality.
 - Do not claim that a feature works unless it has been tested.
+
+## Phase 4 Security Audit — 2026-10-22
+
+### Verified repository and branch state
+
+- Repository: `Snr-Dave/Boarvest` (`origin` points to `https://github.com/Snr-Dave/Boarvest.git`).
+- Working tree branch: `feat/settings-security`.
+- `feat/settings-security` exists locally and as `origin/feat/settings-security`.
+- The configured remote also contains `origin/dev`.
+- `git ls-remote` reports `dev` and `feat/settings-security` at the same commit (`3222565`), so the inspected Security implementation is present on both remote branch refs at the time of this audit. No branch, merge, push, or deployment was performed.
+- This repository contains `AGENTS.md`; an `AGENT.md` file does not exist. This audit was recorded in the existing `AGENTS.md` without creating a second instruction file.
+
+### Phase 4 requirement audit
+
+- [x] **1. Change Password action — Implemented; user-reported manual verification passed.** `components/dashboard/SecuritySettings.tsx` reauthenticates with `auth.signInWithPassword` and calls `auth.updateUser({ password: newPassword })`.
+- [x] **2. Required password fields and validation — Implemented; code-inspected, not independently runtime-tested by the agent.** Current password, new password, and confirmation are required; the new password has an eight-character minimum, must match confirmation, and must differ from the current password.
+- [x] **3. Show/hide password controls — Implemented; code-inspected.** The Security form toggles all password inputs between `password` and `text`.
+- [ ] **4. Password-reset flow and configuration — Partially implemented / blocked by redirect defect.** The app requests `${window.location.origin}/auth/callback?next=/reset-password`, the callback exchanges the code, and `/reset-password` calls `auth.updateUser({ password })`. The end-to-end flow is not complete until the reported deployed-link failure is resolved.
+- [x] **5. Sign Out in Security settings — Implemented; user-reported manual verification passed.** `SecuritySettings` renders the existing `SignOutButton`.
+- [x] **6. Existing logout and session handling preserved — Implemented; code-inspected and supported by the user-reported Sign Out pass.** `SignOutButton` calls `auth.signOut()`, replaces the route with `/login`, and refreshes the router; no session helper or proxy changes were made.
+- [x] **7. Password-change functionality — Implemented and user-reported as passed.** “Password updated successfully.” was displayed. This is user-reported evidence, not an independently executed agent test.
+- [x] **8. Sign Out functionality — Implemented and user-reported as passed.** This is user-reported manual evidence, not an independently executed agent test.
+- [x] **9. Password-reset email delivery — Implemented and user-reported as passed.** Delivery was reported successful; the agent did not send or inspect an email.
+- [ ] **10. Password-reset link and recovery end to end — Blocked by unresolved defect.** The link redirected to `localhost:3000` and returned `otp_expired` / `access_denied`. The code does not hardcode localhost in the forgot-password path, but signup still uses optional `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL`, whose documented example is `http://localhost:3000/auth/callback`. This makes an environment/template/configuration mismatch plausible, but does not prove the root cause. Reused, expired, malformed, or otherwise invalid recovery links are also possible.
+- [x] **11. Security “Coming soon” badge — Implemented.** The Security section now passes `badge={null}` in `app/dashboard/settings/page.tsx`, matching the completed Profile Information section.
+
+### Phase 4 implementation and verification summary
+
+The Security interface is implemented in `components/dashboard/SecuritySettings.tsx`, rendered by `app/dashboard/settings/page.tsx`, and styled in `app/dashboard/dashboard.css`. Phase 4 is **implemented with outstanding work**, not fully complete: password change, Sign Out, and forgot-password email delivery passed manual testing, while the complete password-reset link flow remains unresolved.
+
+### User-reported manual test results
+
+- Password change: **PASSED** — manually tested successfully; “Password updated successfully.” displayed.
+- Sign Out: **PASSED** — manually tested successfully.
+- Forgot-password email delivery: **PASSED**.
+- Password-reset link: **OUTSTANDING** — redirects to `localhost:3000` and returns `otp_expired` / `access_denied`.
+
+### Password-reset cause assessment and Supabase checks
+
+- **Confirmed:** `app/forgot-password/page.tsx` builds the callback URL from the browser's `window.location.origin`; `app/auth/callback/route.ts` exchanges a `code` and redirects to `/reset-password`; `app/reset-password/page.tsx` updates the password only after a valid Supabase recovery session. The current code has no literal localhost in the forgot-password redirect.
+- **Likely configuration area:** check Supabase Authentication → URL Configuration → **Site URL** and **Redirect URLs**. The production Site URL should be the actual deployed Boarvest origin; the exact production domain is not present in this repository, so it is not recorded here. The allow-list should include the production callback pattern `<production-origin>/auth/callback` and the local development callback `http://localhost:3000/auth/callback` (or the exact local origin used). If query strings are validated by the project configuration, also allow the callback target used by the app, `/auth/callback?next=/reset-password`, or use the project's documented wildcard/pattern syntax.
+- **Email template:** inspect the Supabase password-reset template and ensure its generated link preserves the app's configured redirect target rather than substituting `http://localhost:3000`. Do not replace the app's runtime origin with a guessed production URL.
+- **Other checks:** verify the deployed app is actually generating the email from the production origin, `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL` is not set to localhost in production, and the clicked recovery link is fresh and used only once. These are checks, not confirmed findings; the agent did not access the Supabase dashboard or change settings.
+- **Smallest safe fix:** first correct the Supabase URL/allow-list/template or production environment mismatch, then retest the existing callback flow end to end. Code changes are not indicated by this inspection unless configuration verification shows the deployed origin is unavailable to the current runtime; no code, environment, or Supabase setting was changed in this audit.
+
+### Audit validation performed
+
+- Inspected the current branch, local/remote refs, reset pages, callback route, Supabase browser/server/proxy helpers, settings page, and relevant auth references.
+- Verified `dev` and `feat/settings-security` both exist on `origin` and point to commit `3222565`; the current working branch is `feat/settings-security`. No branch, merge, push, deploy, email, password, or Supabase setting was changed.
+- Validation: `npm run lint`, `npx tsc --noEmit`, and `npm run build` passed. Lint reported one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`; no new problems were reported.
+
+### Remaining work before Phase 4 is fully verified
+
+1. Verify the production Supabase Site URL, Redirect URLs allow-list, password-reset email template, and production environment origin.
+2. Retest a fresh production reset email from link open through password update and subsequent sign-in.
+3. Resolve the password-reset redirect/recovery failure and retest a fresh link end to end; do not mark item 10 complete until it passes.
+4. Preserve the passing password-change, Sign Out, and email-delivery results in future audit updates.
