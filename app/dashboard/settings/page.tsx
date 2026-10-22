@@ -5,7 +5,13 @@ import { getCurrentAdmin } from "@/lib/auth/admin";
 import { createClient } from "@/lib/supabase/server";
 import ProfileInformation from "@/components/dashboard/ProfileInformation";
 import SecuritySettings from "@/components/dashboard/SecuritySettings";
-import CurrencyPreference, { isDisplayCurrency, type DisplayCurrency } from "@/components/dashboard/CurrencyPreference";
+import CurrencyPreference from "@/components/dashboard/CurrencyPreference";
+
+type DisplayCurrency = "USD" | "SOL" | "ETH" | "BNB";
+
+function isDisplayCurrency(value: unknown): value is DisplayCurrency {
+  return value === "USD" || value === "SOL" || value === "ETH" || value === "BNB";
+}
 
 export const instant = false;
 
