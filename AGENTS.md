@@ -289,36 +289,43 @@ PR Expectations
 - [x] **1. Change Password action — Implemented; user-reported manual verification passed.** `components/dashboard/SecuritySettings.tsx` reauthenticates with `auth.signInWithPassword` and calls `auth.updateUser({ password: newPassword })`.
 - [x] **2. Required password fields and validation — Implemented; code-inspected, not independently runtime-tested by the agent.** Current password, new password, and confirmation are required; the new password has an eight-character minimum, must match confirmation, and must differ from the current password.
 - [x] **3. Show/hide password controls — Implemented; code-inspected.** The Security form toggles all password inputs between `password` and `text`.
-- [ ] **4. Password-reset flow and configuration — Partially implemented / blocked by redirect defect.** `/forgot-password` calls `resetPasswordForEmail` with `${window.location.origin}/auth/callback?next=/reset-password`, `/auth/callback` exchanges the code, and `/reset-password` updates the password. The reported link failure means the complete flow is not currently verified.
+- [ ] **4. Password-reset flow and configuration — Partially implemented / blocked by redirect defect.** The app requests `${window.location.origin}/auth/callback?next=/reset-password`, the callback exchanges the code, and `/reset-password` calls `auth.updateUser({ password })`. The end-to-end flow is not complete until the reported deployed-link failure is resolved.
 - [x] **5. Sign Out in Security settings — Implemented; user-reported manual verification passed.** `SecuritySettings` renders the existing `SignOutButton`.
-- [x] **6. Existing logout and session handling preserved — Implemented; code-inspected and supported by the user-reported Sign Out pass.** `SignOutButton` still calls `auth.signOut()`, replaces the route with `/login`, and refreshes the router; no session helper or proxy changes were made.
-- [x] **7. Password-change functionality — Implemented and user-reported as passed.** The user reported the exact success message: “Password updated successfully.” This is user-reported evidence, not an independently executed agent test.
+- [x] **6. Existing logout and session handling preserved — Implemented; code-inspected and supported by the user-reported Sign Out pass.** `SignOutButton` calls `auth.signOut()`, replaces the route with `/login`, and refreshes the router; no session helper or proxy changes were made.
+- [x] **7. Password-change functionality — Implemented and user-reported as passed.** “Password updated successfully.” was displayed. This is user-reported evidence, not an independently executed agent test.
 - [x] **8. Sign Out functionality — Implemented and user-reported as passed.** This is user-reported manual evidence, not an independently executed agent test.
-- [x] **9. Password-reset email delivery — Implemented and user-reported as passed.** The user reported that the forgot-password email was delivered. Delivery was not independently tested by the agent.
-- [ ] **10. Password-reset link and recovery end to end — Blocked by an unresolved defect.** The user reported that opening the email link redirects to `localhost:3000` and produces `otp_expired` / `access_denied`. The code confirms the app constructs the redirect from `window.location.origin` and relies on `/auth/callback`, but this inspection alone does not establish whether the cause is the Supabase redirect allow-list, the email template, the runtime origin, link reuse/expiry, or another deployment configuration issue. No authentication code or environment variable was changed.
-- [ ] **11. Security “Coming soon” badge — Not complete.** `SettingSection` defaults `badge` to `Coming soon`, and the Security section does not pass `badge={null}`. The badge remains visible even though part of Security is implemented.
+- [x] **9. Password-reset email delivery — Implemented and user-reported as passed.** Delivery was reported successful; the agent did not send or inspect an email.
+- [ ] **10. Password-reset link and recovery end to end — Blocked by unresolved defect.** The link redirected to `localhost:3000` and returned `otp_expired` / `access_denied`. The code does not hardcode localhost in the forgot-password path, but signup still uses optional `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL`, whose documented example is `http://localhost:3000/auth/callback`. This makes an environment/template/configuration mismatch plausible, but does not prove the root cause. Reused, expired, malformed, or otherwise invalid recovery links are also possible.
+- [ ] **11. Security “Coming soon” badge — Outstanding.** `SettingSection` defaults `badge` to `Coming soon`, and the Security section does not pass `badge={null}`. The badge remains present in `app/dashboard/settings/page.tsx`.
 
 ### Phase 4 implementation and verification summary
 
-The Settings Security interface is implemented in `components/dashboard/SecuritySettings.tsx`, rendered by `app/dashboard/settings/page.tsx`, styled in `app/dashboard/dashboard.css`, and supported by `components/auth/SignOutButton.tsx`, `app/forgot-password/page.tsx`, `app/reset-password/page.tsx`, `app/auth/callback/route.ts`, and the Supabase client/server/proxy helpers. The implementation is not fully verified: password change, Sign Out, and reset-email delivery are user-reported passes, while the password-reset link/recovery flow remains broken and the Security `Coming soon` badge remains in code. Therefore Phase 4 status is **Implemented with outstanding verification and an unresolved password-reset defect**, not fully implemented and verified.
+The Security interface is implemented in `components/dashboard/SecuritySettings.tsx`, rendered by `app/dashboard/settings/page.tsx`, styled in `app/dashboard/dashboard.css`, and supported by the existing sign-out, forgot-password, reset-password, callback, and Supabase client/server/proxy files. Phase 4 is **implemented with outstanding verification and an unresolved password-reset defect**, not fully implemented and verified. Password change, Sign Out, and email delivery are user-reported passes; the complete recovery flow remains failed, and the Security badge remains outstanding.
 
 ### User-reported manual test results
 
 - Password change: **PASSED** — “Password updated successfully.” displayed.
 - Sign Out: **PASSED**.
 - Forgot-password email delivery: **PASSED**.
-- Password-reset link: **FAILED** — link redirected to `localhost:3000` and produced `otp_expired` / `access_denied`, stating that the email link was invalid or expired.
+- Password-reset link: **FAILED** — redirected to `localhost:3000` and produced `otp_expired` / `access_denied`.
+
+### Password-reset cause assessment and Supabase checks
+
+- **Confirmed:** `app/forgot-password/page.tsx` builds the callback URL from the browser's `window.location.origin`; `app/auth/callback/route.ts` exchanges a `code` and redirects to `/reset-password`; `app/reset-password/page.tsx` updates the password only after a valid Supabase recovery session. The current code has no literal localhost in the forgot-password redirect.
+- **Likely configuration area:** check Supabase Authentication → URL Configuration → **Site URL** and **Redirect URLs**. The production Site URL should be the actual deployed Boarvest origin; the exact production domain is not present in this repository, so it is not recorded here. The allow-list should include the production callback pattern `<production-origin>/auth/callback` and the local development callback `http://localhost:3000/auth/callback` (or the exact local origin used). If query strings are validated by the project configuration, also allow the callback target used by the app, `/auth/callback?next=/reset-password`, or use the project's documented wildcard/pattern syntax.
+- **Email template:** inspect the Supabase password-reset template and ensure its generated link preserves the app's configured redirect target rather than substituting `http://localhost:3000`. Do not replace the app's runtime origin with a guessed production URL.
+- **Other checks:** verify the deployed app is actually generating the email from the production origin, `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL` is not set to localhost in production, and the clicked recovery link is fresh and used only once. These are checks, not confirmed findings; the agent did not access the Supabase dashboard or change settings.
+- **Smallest safe fix:** first correct the Supabase URL/allow-list/template or production environment mismatch, then retest the existing callback flow end to end. Code changes are not indicated by this inspection unless configuration verification shows the deployed origin is unavailable to the current runtime; no code, environment, or Supabase setting was changed in this audit.
 
 ### Audit validation performed
 
-- Inspected the current branch, local/remote refs, and remote branch heads with Git.
-- Inspected the Phase 4 components, settings page/styles, reset pages, callback route, and Supabase browser/server/proxy helpers.
-- Ran `npm run lint && npx tsc --noEmit && npm run build`: completed successfully. Lint reported one pre-existing warning in `app/dashboard/deposits/DepositInterface.tsx` for `@next/next/no-img-element`; no errors were reported.
-- No authenticated browser test, password-change test, Sign Out test, email-delivery test, or reset-link test was independently executed by the agent.
+- Inspected the current branch, local/remote refs, reset pages, callback route, Supabase browser/server/proxy helpers, settings page, and relevant auth references.
+- Verified `dev` and `feat/settings-security` both exist on `origin` and point to commit `3222565`; the current working branch is `feat/settings-security`. No branch, merge, push, deploy, email, password, or Supabase setting was changed.
+- Existing recorded validation remains: `npm run lint`, `npx tsc --noEmit`, and `npm run build` passed; lint reported one pre-existing `@next/next/no-img-element` warning. No authenticated runtime test was independently executed during this audit.
 
 ### Remaining work before Phase 4 is fully verified
 
-1. Diagnose and correct the password-reset redirect/origin configuration without assuming a root cause from the current evidence.
-2. Independently verify the complete reset flow from email link through password update and sign-in.
-3. Remove the Security section's `Coming soon` badge once the implementation is intentionally considered available.
-4. Re-run the relevant authenticated manual checks and record their actual results.
+1. Verify the production Supabase Site URL, Redirect URLs allow-list, password-reset email template, and production environment origin.
+2. Retest a fresh production reset email from link open through password update and subsequent sign-in.
+3. Remove the Security section's `Coming soon` badge once the implemented section is intentionally considered available.
+4. Record independent or user-confirmed results for the complete recovery flow; do not mark item 10 complete until it passes.
