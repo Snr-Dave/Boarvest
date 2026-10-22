@@ -272,3 +272,53 @@ PR Expectations
 - Document changes to environment variables, database schema, or authentication behaviour.
 - Preserve working deposit, Transactions, and admin functionality.
 - Do not claim that a feature works unless it has been tested.
+
+## Phase 4 Security Audit — 2026-10-22
+
+### Verified repository and branch state
+
+- Repository: `Snr-Dave/Boarvest` (`origin` points to `https://github.com/Snr-Dave/Boarvest.git`).
+- Working tree branch: `feat/settings-security`.
+- `feat/settings-security` exists locally and as `origin/feat/settings-security`.
+- The configured remote also contains `origin/dev`.
+- `git ls-remote` reports `dev` and `feat/settings-security` at the same commit (`3222565`), so the inspected Security implementation is present on both remote branch refs at the time of this audit. No branch, merge, push, or deployment was performed.
+- This repository contains `AGENTS.md`; an `AGENT.md` file does not exist. This audit was recorded in the existing `AGENTS.md` without creating a second instruction file.
+
+### Phase 4 requirement audit
+
+- [x] **1. Change Password action — Implemented; user-reported manual verification passed.** `components/dashboard/SecuritySettings.tsx` reauthenticates with `auth.signInWithPassword` and calls `auth.updateUser({ password: newPassword })`.
+- [x] **2. Required password fields and validation — Implemented; code-inspected, not independently runtime-tested by the agent.** Current password, new password, and confirmation are required; the new password has an eight-character minimum, must match confirmation, and must differ from the current password.
+- [x] **3. Show/hide password controls — Implemented; code-inspected.** The Security form toggles all password inputs between `password` and `text`.
+- [ ] **4. Password-reset flow and configuration — Partially implemented / blocked by redirect defect.** `/forgot-password` calls `resetPasswordForEmail` with `${window.location.origin}/auth/callback?next=/reset-password`, `/auth/callback` exchanges the code, and `/reset-password` updates the password. The reported link failure means the complete flow is not currently verified.
+- [x] **5. Sign Out in Security settings — Implemented; user-reported manual verification passed.** `SecuritySettings` renders the existing `SignOutButton`.
+- [x] **6. Existing logout and session handling preserved — Implemented; code-inspected and supported by the user-reported Sign Out pass.** `SignOutButton` still calls `auth.signOut()`, replaces the route with `/login`, and refreshes the router; no session helper or proxy changes were made.
+- [x] **7. Password-change functionality — Implemented and user-reported as passed.** The user reported the exact success message: “Password updated successfully.” This is user-reported evidence, not an independently executed agent test.
+- [x] **8. Sign Out functionality — Implemented and user-reported as passed.** This is user-reported manual evidence, not an independently executed agent test.
+- [x] **9. Password-reset email delivery — Implemented and user-reported as passed.** The user reported that the forgot-password email was delivered. Delivery was not independently tested by the agent.
+- [ ] **10. Password-reset link and recovery end to end — Blocked by an unresolved defect.** The user reported that opening the email link redirects to `localhost:3000` and produces `otp_expired` / `access_denied`. The code confirms the app constructs the redirect from `window.location.origin` and relies on `/auth/callback`, but this inspection alone does not establish whether the cause is the Supabase redirect allow-list, the email template, the runtime origin, link reuse/expiry, or another deployment configuration issue. No authentication code or environment variable was changed.
+- [ ] **11. Security “Coming soon” badge — Not complete.** `SettingSection` defaults `badge` to `Coming soon`, and the Security section does not pass `badge={null}`. The badge remains visible even though part of Security is implemented.
+
+### Phase 4 implementation and verification summary
+
+The Settings Security interface is implemented in `components/dashboard/SecuritySettings.tsx`, rendered by `app/dashboard/settings/page.tsx`, styled in `app/dashboard/dashboard.css`, and supported by `components/auth/SignOutButton.tsx`, `app/forgot-password/page.tsx`, `app/reset-password/page.tsx`, `app/auth/callback/route.ts`, and the Supabase client/server/proxy helpers. The implementation is not fully verified: password change, Sign Out, and reset-email delivery are user-reported passes, while the password-reset link/recovery flow remains broken and the Security `Coming soon` badge remains in code. Therefore Phase 4 status is **Implemented with outstanding verification and an unresolved password-reset defect**, not fully implemented and verified.
+
+### User-reported manual test results
+
+- Password change: **PASSED** — “Password updated successfully.” displayed.
+- Sign Out: **PASSED**.
+- Forgot-password email delivery: **PASSED**.
+- Password-reset link: **FAILED** — link redirected to `localhost:3000` and produced `otp_expired` / `access_denied`, stating that the email link was invalid or expired.
+
+### Audit validation performed
+
+- Inspected the current branch, local/remote refs, and remote branch heads with Git.
+- Inspected the Phase 4 components, settings page/styles, reset pages, callback route, and Supabase browser/server/proxy helpers.
+- Ran `npm run lint && npx tsc --noEmit && npm run build`: completed successfully. Lint reported one pre-existing warning in `app/dashboard/deposits/DepositInterface.tsx` for `@next/next/no-img-element`; no errors were reported.
+- No authenticated browser test, password-change test, Sign Out test, email-delivery test, or reset-link test was independently executed by the agent.
+
+### Remaining work before Phase 4 is fully verified
+
+1. Diagnose and correct the password-reset redirect/origin configuration without assuming a root cause from the current evidence.
+2. Independently verify the complete reset flow from email link through password update and sign-in.
+3. Remove the Security section's `Coming soon` badge once the implementation is intentionally considered available.
+4. Re-run the relevant authenticated manual checks and record their actual results.
