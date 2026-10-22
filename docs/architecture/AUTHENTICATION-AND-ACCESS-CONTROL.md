@@ -51,9 +51,10 @@ Boarvest uses Supabase Auth for user identity and a small admin-membership table
 - Distinction: session retrieval (supabase.auth.getUser()) identifies the signed-in user; it does not by itself authorize admin access. Administrator authorization requires getCurrentAdmin()'s explicit membership lookup.
 
 ## 6. Current Limitations
-- The admin dashboard explicitly uses placeholder/mock financial data (components/admin/AdminDashboard.tsx displays "Mock data preview" and a notice that financial data is not connected).
-- I did not find server-side implementations in the inspected files for live deposit processing, withdrawal settlements, transaction ledgers, or other financial operations; these features are not verified as implemented by the repository files reviewed.
-- The migration file documents intended schema and RLS policies for admin_memberships, but the file alone does not prove those schema changes are applied to any running database — runtime verification is separate and outside this repo-level review.
+- Admin deposit listing and review are implemented in code, but live operation depends on the deposit-accounting migration, Supabase RLS/RPC state, and integration testing.
+- The admin user directory uses the Supabase Auth Admin API and therefore requires `SUPABASE_SERVICE_ROLE_KEY` on the server. The key is not available to browser code.
+- Withdrawal settlement, blockchain verification, reconciliation, and investment accounting are not implemented.
+- Migration files document the expected schema and policies; they do not prove those changes are applied to a running Supabase project.
 
 ## 7. Relevant Files
 - supabase/migrations/20261017000000_create_admin_memberships.sql — migration that defines public.admin_memberships and RLS/policy/privilege revocations.

@@ -1,53 +1,44 @@
 # Boarvest Application Architecture
 
-## 1. Purpose
+**Status: Current implementation map with planned boundaries.**
 
-This document defines the planned structure and responsibilities of the Boarvest application.
+## Runtime structure
 
-Boarvest will have four principal areas:
-
-1. Public website
-2. Authentication pages
-3. User dashboard
-4. Administrative panel
-
-Authentication, database operations, deposit verification, withdrawals, and referral commissions will be implemented in planned phases.
-
-The architecture will evolve as the project develops. Components and backend modules should be introduced when their responsibilities are clear.
-
-## 2. Application Route Structure
-
-The following is the intended route structure. Routes will be created as the corresponding development phases begin.
+Boarvest uses the Next.js 16 App Router, React 19, TypeScript, and Supabase SSR clients. Authentication cookies are synchronized by `proxy.ts` through `lib/supabase/proxy.ts`. Server pages and Route Handlers use `lib/supabase/server.ts`; browser components use `lib/supabase/client.ts`.
 
 ```text
 app/
-├── layout.tsx
-├── globals.css
 ├── page.tsx
-│
-├── about/
-│   └── page.tsx
-│
-├── login/
-│   └── page.tsx
-│
-├── signup/
-│   └── page.tsx
-│
+├── login/page.tsx
+├── signup/page.tsx
+├── auth/{callback,error,redirect}/
 ├── dashboard/
-│   ├── layout.tsx
 │   ├── page.tsx
-│   ├── portfolio/
-│   │   └── page.tsx
-│   ├── transactions/
-│   │   └── page.tsx
-│   ├── deposits/
-│   │   └── page.tsx
-│   ├── withdrawals/
-│   │   └── page.tsx
-│   └── settings/
-│       └── page.tsx
-│
-└── admin/
-    ├── layout.tsx
-    └── page.tsx
+│   ├── deposits/{page.tsx,DepositInterface.tsx}
+│   └── transactions/{page.tsx,TransactionsList.tsx}
+├── admin/page.tsx
+└── api/
+    ├── deposits/{route.ts,mine/route.ts}
+    ├── admin/deposits/{route.ts,[id]/review/route.ts}
+    ├── admin/users/route.ts
+    └── market-prices/route.ts
+```
+
+## Feature status
+
+- Public homepage: **Completed**.
+- Email/password Auth UI, callbacks, password reset, and session refresh: **Completed in code**.
+- Protected user dashboard shell: **Completed**.
+- Deposit request creation and user history: **Completed in code; requires the accounting schema and configured Supabase runtime**.
+- Admin membership authorization: **Completed in code; requires `admin_memberships`**.
+- Admin deposit review and ledger credit path: **Completed in code; requires `deposit_accounting` migration and integration testing**.
+- Admin user list/details: **Completed in code; requires `SUPABASE_SERVICE_ROLE_KEY` server configuration**.
+- Withdrawals, blockchain verification, investment returns, and referral commissions: **Planned**.
+
+## Authorization boundaries
+
+`app/admin/page.tsx` and every admin API independently call `getCurrentAdmin()` from `lib/auth/admin.ts`. The helper authenticates the session with `auth.getUser()` and checks `public.admin_memberships`. A browser-selected user ID is input, not authorization evidence. The service-role key is read only in the server-side admin users and deposit routes and is never imported by client components.
+
+## Data and operational boundary
+
+The migration files describe the database contract, but Git does not prove that a Supabase project has applied them. Treat pending/missing tables or functions as a deployment prerequisite, not as a reason to fabricate data. Use local or disposable integration testing before any production migration or financial operation.

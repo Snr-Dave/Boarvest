@@ -1,9 +1,11 @@
+import { connection } from "next/server";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import TransactionsList from "./TransactionsList";
 import { createClient } from "@/lib/supabase/server";
 
 export const instant = false;
 export default async function TransactionsPage() {
+  await connection();
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   const displayName = typeof user?.user_metadata?.display_name === "string" ? user.user_metadata.display_name : null;
