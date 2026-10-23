@@ -342,3 +342,10 @@ The Security interface is implemented in `components/dashboard/SecuritySettings.
 2. Retest a fresh production reset email from link open through password update and subsequent sign-in.
 3. Resolve the password-reset redirect/recovery failure and retest a fresh link end to end; do not mark item 10 complete until it passes.
 4. Preserve the passing password-change, Sign Out, and email-delivery results in future audit updates.
+
+## Withdrawal workflow review — 2026-10-23
+
+- **Verified status:** Withdrawal functionality is not implemented. `app/dashboard/withdrawals/page.tsx` renders an unavailable placeholder; the admin dashboard's Withdrawals section is a generic placeholder; no withdrawal API, database model, review operation, or user status view exists. The admin user detail view also reports withdrawals as not implemented.
+- **Documentation:** The planned workflow, deposit reuse assessment, security requirements, and implementation sequence are documented in `docs/architecture/WITHDRAWAL_WORKFLOW.md`.
+- **Scope preserved:** No application code, database schema, environment variables, or financial workflows were modified. Phase 6 and Phase 7 settings checklist items remain unchanged and are not being marked complete based on this review.
+- **Recommended first implementation step:** Approve the withdrawal financial model (canonical balance source, pending reservation/debit timing, asset/network and wallet validation, fees/limits, and transfer completion semantics) before proposing a withdrawal migration and transaction-safe review operation.
