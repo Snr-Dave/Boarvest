@@ -349,3 +349,119 @@ The Security interface is implemented in `components/dashboard/SecuritySettings.
 - **Documentation:** The planned workflow, deposit reuse assessment, security requirements, and implementation sequence are documented in `docs/architecture/WITHDRAWAL_WORKFLOW.md`.
 - **Scope preserved:** No application code, database schema, environment variables, or financial workflows were modified. Phase 6 and Phase 7 settings checklist items remain unchanged and are not being marked complete based on this review.
 - **Recommended first implementation step:** Approve the withdrawal financial model (canonical balance source, pending reservation/debit timing, asset/network and wallet validation, fees/limits, and transfer completion semantics) before proposing a withdrawal migration and transaction-safe review operation.
+
+## Withdrawal Implementation Roadmap
+
+This roadmap is based on the verified current repository state and the existing deposit architecture. Withdrawal functionality is not implemented. Each phase requires explicit user approval before work begins; after each phase, record actual verification results and stop for approval before continuing.
+
+### Phase 1 — Requirements and Financial Workflow
+
+Objective: confirm the complete withdrawal lifecycle before changing financial code.
+
+- [ ] Define supported assets, networks, destination-wallet rules, amount limits, fees, and required user inputs.
+- [ ] Define statuses and transitions, including pending, approved, rejected, and transfer-completed/failed states.
+- [ ] Decide when funds are reserved or debited, how insufficient balance is handled, and whether pending requests reduce available balance.
+- [ ] Define administrator responsibilities, review evidence, notes, and transfer-completion ownership.
+- [ ] Confirm that approval is distinct from actual external transfer completion.
+
+Approval checkpoint before Phase 1: provide the objective, affected workflow files and financial entities, intended requirements decisions, verification approach, and risks requiring user input. Do not implement until explicitly approved.
+
+### Phase 2 — Database and Security
+
+Objective: design and approve the isolated withdrawal persistence and transaction boundaries.
+
+- [ ] Design a withdrawal-specific request table and any reservation, debit, ledger, or transfer-attempt records required by Phase 1.
+- [ ] Define status constraints, immutable financial fields, references, timestamps, reviewer fields, indexes, and idempotency/uniqueness rules.
+- [ ] Define user-scoped RLS policies and administrator authorization using the existing `admin_memberships` pattern.
+- [ ] Design a transaction-safe database operation with row locking and a pending-only transition to prevent duplicate processing.
+- [ ] Document how rejected, failed, and completed transfers affect reservations and the canonical balance.
+- [ ] Obtain explicit approval for the migration and financial operation before creating or applying either.
+
+Approval checkpoint before Phase 2: summarize the proposed schema objects, RLS policies, transaction boundaries, affected migration/RPC files, verification plan, and unresolved financial-security decisions.
+
+### Phase 3 — User Withdrawal Interface
+
+Objective: replace the unavailable user placeholder with a secure, understandable request experience.
+
+- [ ] Replace `app/dashboard/withdrawals/page.tsx` placeholder content with an authenticated withdrawal screen.
+- [ ] Add typed inputs for the approved asset/network, destination wallet, amount, fees, and confirmation details.
+- [ ] Add client-side usability validation without treating it as the authorization boundary.
+- [ ] Add explicit confirmation language distinguishing a request from an approved or completed transfer.
+- [ ] Add the authenticated user’s withdrawal history with status, timestamps, amount, destination summary, and administrator note where approved.
+- [ ] Preserve the existing dashboard layout, mobile behavior, and deposit workflow.
+
+Approval checkpoint before Phase 3: identify affected user route/components, approved fields and status labels, implementation scope, browser/API verification, and risks such as misleading transfer semantics or wallet data exposure.
+
+### Phase 4 — Withdrawal Request API
+
+Objective: create and read withdrawal requests through authenticated, server-authorized endpoints.
+
+- [ ] Add an authenticated request-creation route following the deposit API’s SSR-safe server client and error handling patterns.
+- [ ] Validate all request fields server-side, including asset/network compatibility, wallet format, amount limits, fees, and numeric precision.
+- [ ] Derive the user identity from the authenticated session; never accept a client-provided owner or balance.
+- [ ] Enforce available-balance and pending-reservation rules using the approved database operation.
+- [ ] Add a user-scoped history endpoint or server data loader with RLS-backed ownership checks.
+- [ ] Add safe handling for duplicate submissions and database failures without leaking privileged details.
+
+Approval checkpoint before Phase 4: list route/data-loader files, validation and ownership rules, persistence operation used, test cases, and any dependency on the Phase 2 migration or RPC.
+
+### Phase 5 — Admin Withdrawal Management
+
+Objective: replace the generic admin placeholder with a review workflow consistent with existing admin authorization.
+
+- [ ] Replace the generic Withdrawals `PlaceholderSection` in `components/admin/AdminDashboard.tsx` with a dedicated review view.
+- [ ] Add an admin-only list route/data loader with filters and request details sufficient for review.
+- [ ] Add approve and reject actions with required notes or evidence rules from Phase 1.
+- [ ] Gate every admin route/action through the existing admin authorization pattern; do not trust client roles.
+- [ ] Call the transaction-safe withdrawal review operation and display conflict, insufficient-balance, and already-processed states clearly.
+- [ ] Avoid exposing unnecessary wallet or personal information in list views.
+
+Approval checkpoint before Phase 5: identify admin components/routes/RPC calls, review controls, authorization boundaries, verification accounts, and risks around privileged actions and sensitive destination data.
+
+### Phase 6 — Financial Integrity and Status Tracking
+
+Objective: ensure one-time processing, consistent balances, and accurate user-visible lifecycle status.
+
+- [ ] Verify that concurrent admin reviews cannot approve or debit the same request twice.
+- [ ] Verify that reservations/debits and ledger records are atomic, balanced, auditable, and linked to the withdrawal request.
+- [ ] Verify rejection and transfer-failure paths release or preserve funds according to the approved financial model.
+- [ ] Distinguish approved, submitted, completed, and failed external transfers in persistence and UI where applicable.
+- [ ] Verify users can see only their own current status and relevant review/transfer timestamps.
+- [ ] Verify changing or refreshing the UI cannot repeat financial operations.
+- [ ] Confirm deposits, account balances, ledger behavior, Transactions, and admin authorization remain unchanged outside the approved withdrawal scope.
+
+Approval checkpoint before Phase 6: provide the exact integrity invariants, affected ledger/balance operations, concurrency test plan, status semantics, and any newly discovered financial decision before making corrective changes.
+
+### Phase 7 — Testing and Regression Checks
+
+Objective: validate security, correctness, concurrency, and regressions with actual evidence.
+
+- [ ] Test unauthenticated request creation and history access are rejected.
+- [ ] Test user ownership isolation for request creation, reads, and status data.
+- [ ] Test malformed wallets, unsupported assets/networks, invalid precision, limits, fees, and insufficient balances.
+- [ ] Test duplicate submissions, concurrent admin reviews, already-processed requests, and idempotent retry behavior.
+- [ ] Test approval, rejection, transfer failure, reservation release, and administrator notes.
+- [ ] Test user and admin UI status rendering at the supported viewport sizes.
+- [ ] Regression-test deposits, deposit approval, account balances, ledger entries, Transactions, and existing admin authorization.
+- [ ] Record actual results, including any pre-existing warnings or blocked checks; do not mark a step complete from code inspection alone.
+
+Approval checkpoint before Phase 7: specify the test accounts/data strategy, destructive-test safeguards, browser/API/database checks, expected evidence, and any external transfer simulation boundary.
+
+### Phase 8 — Final Verification and Documentation
+
+Objective: complete the approved implementation, preserve operational clarity, and document evidence.
+
+- [ ] Run `npm run lint`, `npx tsc --noEmit`, and `npm run build` when the implementation and environment support them.
+- [ ] Perform authorized manual verification of user and admin workflows without using real external transfers.
+- [ ] Review the final migration, RLS policies, RPC/transaction operation, routes, UI, and error handling for scope and security.
+- [ ] Update `docs/architecture/WITHDRAWAL_WORKFLOW.md` with final schema, status, security, and operational decisions.
+- [ ] Update this roadmap with changed files, actual test results, unresolved issues, and the final implementation status.
+- [ ] Report what was changed and what remains incomplete; do not merge, push, or deploy without explicit authorization.
+
+Approval checkpoint before Phase 8: confirm the final verification scope, documentation changes, deployment/merge restrictions, and any remaining release blockers.
+
+### Roadmap decisions and current status
+
+- The existing deposit implementation is a reference for authentication, RLS, admin gating, review UI structure, and transaction-safe review operations; withdrawal must use separate request/debit records and must not reuse deposit credits or `deposit_request_id`.
+- No application code, database schema, migration, environment variable, or financial workflow was modified while establishing this roadmap.
+- Phase 1 is the recommended next phase and is awaiting explicit approval. No phase is marked implemented or verified.
