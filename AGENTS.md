@@ -356,15 +356,18 @@ This roadmap is based on the verified current repository state and the existing 
 
 ### Phase 1 — Requirements and Financial Workflow
 
-Objective: confirm the complete withdrawal lifecycle before changing financial code.
+Objective: establish and document the withdrawal lifecycle before changing financial code. Phase 1 documentation is now drafted from the approved requirements, but remains **in progress** until the user reviews and explicitly confirms the financial decisions below.
 
-- [ ] Define supported assets, networks, destination-wallet rules, amount limits, fees, and required user inputs.
-- [ ] Define statuses and transitions, including pending, approved, rejected, and transfer-completed/failed states.
-- [ ] Decide when funds are reserved or debited, how insufficient balance is handled, and whether pending requests reduce available balance.
-- [ ] Define administrator responsibilities, review evidence, notes, and transfer-completion ownership.
-- [ ] Confirm that approval is distinct from actual external transfer completion.
+- [ ] Confirm SOL/Solana, ETH/Ethereum, and BNB/BNB Smart Chain support, explicit asset/network selection, and server-side destination validation. Current status: requirements drafted in `docs/architecture/WITHDRAWAL_WORKFLOW.md`; approval remains pending.
+- [ ] Confirm USD denomination, $10 minimum, $5,000 maximum, zero initial fee, server-side balance checks, and server-side-only market-price use for any future token estimate. Current status: drafted; Phase 2 must inspect the existing market-price route and define precision/freshness rules.
+- [ ] Confirm immutable request snapshots and explicit user confirmation of destination address and network. Current status: drafted; schema representation is deferred to Phase 2.
+- [ ] Confirm lifecycle `pending_review`, `approved`, `transfer_pending`, `completed`, `rejected`, and `failed`, with approval distinct from transfer completion. Current status: drafted; exact transition guards are deferred to Phase 2.
+- [ ] Confirm atomic reservation semantics: reserve at request creation, keep funds unavailable through review/transfer processing, release rejection exactly once, and prevent concurrent over-reservation. Current status: drafted; canonical balance source and reservation operation are deferred to Phase 2.
+- [ ] Define safe failed-transfer recovery without silent release or duplicate debit. Current status: identified as a required Phase 2 financial decision; no behavior has been implemented.
+- [ ] Confirm manual administrator-controlled transfer processing, evidence/hash and completion timestamp requirements, notes, and authorization boundaries. Current status: drafted; admin operation details are deferred to Phase 2.
+- [ ] Verify the proposed requirements against the existing deposit and canonical accounting architecture without changing either. Current status: architecture review documented; implementation verification is intentionally not claimed.
 
-Approval checkpoint before Phase 1: provide the objective, affected workflow files and financial entities, intended requirements decisions, verification approach, and risks requiring user input. Do not implement until explicitly approved.
+Phase 1 approval checkpoint: review the requirements document and confirm the balance reservation/debit model, failed-transfer recovery policy, address-validation rules, USD precision, and market-price treatment. No Phase 2 work may begin until explicitly approved.
 
 ### Phase 2 — Database and Security
 

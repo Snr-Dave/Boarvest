@@ -1,36 +1,38 @@
-# Withdrawal Workflow Roadmap
+# Withdrawal Workflow
 
-## Verified status
+## Phase 1 requirements — confirmed
 
-Withdrawal functionality is **not implemented**. The user route `app/dashboard/withdrawals/page.tsx` renders a placeholder stating that withdrawals are unavailable. The admin dashboard lists “Withdrawals” in navigation, but routes it to the generic `PlaceholderSection`; there is no withdrawal API, review UI, persistence model, or balance-settlement workflow. The admin user detail view also reports total withdrawals as “Not implemented.”
+Withdrawal functionality is **not implemented**. The user route `app/dashboard/withdrawals/page.tsx` is an unavailable placeholder, and the admin dashboard routes Withdrawals to the generic `PlaceholderSection`. There is no withdrawal API, persistence model, review UI, reservation operation, or transfer-completion workflow.
 
-No application code, schema, environment variable, or financial workflow was changed during this review.
+The following requirements are confirmed for the initial implementation:
 
-## Planned workflow
+- **Assets and networks:** SOL on Solana, ETH on Ethereum, and BNB on BNB Smart Chain. The user explicitly selects both asset and network; the server validates that pairing and the destination address format for that network.
+- **Currency, limits, and fees:** requests are denominated in USD, with a $10 minimum and $5,000 maximum per request. The server enforces both limits and rejects amounts above available balance. The initial fee is $0. Token estimates, if later displayed, must use the existing market-price implementation server-side; client-provided rates are never trusted.
+- **Request snapshot:** asset, network, destination address, USD amount, fee, request timestamp, and status are captured as immutable financial/destination details. The user must explicitly confirm the address and network.
+- **Statuses:** `pending_review` → `approved` → `transfer_pending` → `completed`, with `rejected` and `failed` terminal outcomes as appropriate. Approval is an administrative decision, not proof of blockchain transfer completion.
+- **Operations:** transfers are manual and administrator-controlled. A transaction hash/reference and completion timestamp are recorded when applicable. Automated blockchain transfers are out of scope.
 
-1. The authenticated user opens **Withdrawals** in the dashboard.
-2. The user enters a supported withdrawal asset/network, destination wallet, and USD amount, then confirms the request.
-3. A server-authorized endpoint validates ownership, input, available balance, asset/network compatibility, and request limits before saving a pending request securely.
-4. The pending request appears in the admin dashboard for review, with enough context to verify the user, amount, destination, and current balance.
-5. An authorized administrator approves or rejects the request. The approval and balance/debit update must occur in one protected, transactional operation.
-6. The user can view their own request history and status, including review time and an administrator note where appropriate.
+## Planned workflow and reservation rules
 
-## Reuse from deposits
+1. An authenticated user opens Withdrawals, enters the approved fields, reviews the confirmation summary, and submits.
+2. A server-authorized operation validates identity, asset/network compatibility, address, USD precision, limits, fee, and available balance. It atomically reserves the USD amount so concurrent requests cannot overdraw availability.
+3. Reserved funds remain unavailable through review and transfer processing. The request appears in the admin dashboard with the user, immutable request snapshot, and relevant balance context.
+4. An authorized administrator approves or rejects with an appropriate note. Approval moves the request to `approved`; it does not complete the transfer. Rejection releases the reservation exactly once.
+5. The administrator records transfer submission separately, moving the request to `transfer_pending`, then records verified evidence and completion time before `completed`.
+6. A failed transfer must be handled by an explicit, auditable operation defined in Phase 2: it must not silently release or double-debit funds. The final rule must preserve the reservation or release/re-credit it atomically according to verified transfer outcome and ledger policy.
+7. Users can view only their own request history and current status; administrators can review and update requests through server-side authorization. Repeated reviews and retries are rejected or made idempotent.
 
-- **Dashboard structure:** reuse the existing dashboard navigation/shell patterns and replace the withdrawal placeholder with a dedicated user interface; do not copy deposit wording or wallet direction blindly.
-- **Request handling:** follow `app/api/deposits/route.ts` and `app/api/deposits/mine/route.ts` for authenticated server-client access, validation, scoped reads, consistent error responses, and pending-request creation.
-- **Admin review:** follow `components/admin/AdminDashboard.tsx`, `app/api/admin/deposits/route.ts`, and `app/api/admin/deposits/[id]/review/route.ts` for admin gating, filters, review feedback, and refresh behavior.
-- **Database/security patterns:** the deposit migration provides useful patterns: UUID request IDs and references, explicit status constraints, timestamps/reviewer fields, indexes, RLS scoped to `auth.uid()`, admin membership checks, immutable reviewed financial fields, row locking, and a security-definer review RPC with execute permissions restricted to authenticated users.
-- **Accounting protection:** `account_ledger` is append-only and deposit approval is protected by database constraints/triggers. Withdrawals should not write a deposit credit or reuse `deposit_request_id`; they need a withdrawal-specific request/debit model and a transaction-safe balance reservation or debit strategy.
+## Deposit architecture to reuse selectively
 
-## Important differences from deposits
+- Reuse the dashboard shell and authenticated server-client patterns from `app/api/deposits/route.ts` and `app/api/deposits/mine/route.ts`, including session-derived identity, validation, scoped reads, and consistent errors.
+- Reuse admin gating, list/review structure, and refresh behavior from `components/admin/AdminDashboard.tsx`, `app/api/admin/deposits/route.ts`, and `app/api/admin/deposits/[id]/review/route.ts`.
+- Treat the deposit migration as a security reference for UUID identifiers, explicit statuses, timestamps/reviewer fields, indexes, RLS ownership, admin membership checks, immutable reviewed fields, row locking, and restricted review RPC execution.
+- Do **not** reuse deposit request rows, deposit identifiers, deposit-credit operations, or deposit semantics. Withdrawals require withdrawal-specific request, reservation/debit, ledger, and transfer evidence records or operations.
 
-A withdrawal sends value to a user-controlled destination and reduces available funds. Before implementation, define the canonical balance source, whether pending requests reserve funds, supported wallet validation, minimum/maximum limits, fee handling, and whether an approved request represents an instruction or a completed transfer. Never trust a client-provided balance, exchange rate, approval state, or transaction result. Duplicate approvals must be rejected by row locking and a pending-only state transition, with an idempotent accounting record or unique constraint preventing duplicate debits.
+## Phase 2 design decisions — not yet implemented
 
-## Recommended implementation sequence
+Phase 2 must define the canonical balance source and exact reservation representation, ledger/debit linkage, row-locking and idempotency constraints, RLS policies, address-validation library/rules, USD precision, and the safe failed-transfer recovery operation. It must also review `app/api/market-prices/route.ts` before any token estimate is specified. No migration, RPC, application code, environment variable, or financial operation has been changed for Phase 1.
 
-1. Approve the withdrawal financial model and destination/asset requirements, then design the migration and RLS policies.
-2. Add the withdrawal request table and secure database operation for pending creation, reservation/debit, and one-time admin review.
-3. Add authenticated user request/status views and the admin review/listing endpoints and UI.
-4. Add focused tests for ownership, validation, insufficient balance, concurrent review, duplicate processing, rejection, and unchanged deposit behavior.
-5. Run the repository validation commands and manually verify both dashboards with authorized test accounts.
+## Verification approach
+
+Before implementation, verify the requirements against the existing balance and deposit accounting model. Later phases must use authorized test accounts and simulated/manual transfer evidence to verify ownership isolation, malformed and unsupported wallets, limits, insufficient and concurrent balances, duplicate reviews, rejection reservation release, failed-transfer recovery, status visibility, and unchanged deposit behavior. Phase 1 remains planning-only until explicitly marked complete after documentation review.
