@@ -4,341 +4,288 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 This block is written and re-added by "next dev" — verify at "node_modules/next/dist/server/lib/generate-agent-files.js". Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
-<!-- END:nextjs-agent-rules -->Boarvest Agent Instructions
+<!-- END:nextjs-agent-rules -->
 
-Project Overview
+# Boarvest — Agent Task Controller & Workflow Manager
 
-This repository is a Next.js 16 + TypeScript application with Supabase authentication and an investment platform dashboard.
+This file is the single source of truth for **what work an AI agent may do next**, in what order, and with what evidence. It is a controller, not a backlog: a phase is a gate that opens only with owner approval.
 
-Stack
+Read this whole file before touching the repository. Update it (and only it) as work is verified.
 
-- Next.js 16
-- React 19
-- TypeScript
-- Supabase
-- ESLint
-- Node.js 24
+---
 
-Current Task: User Dashboard Settings
+## 0. Operating Protocol (mandatory)
 
-Branch: "feat/settings-security"
+### 0.1 Task status legend
 
-Current Mode: Planning and documentation only.
+Every task in every phase uses exactly one of these markers:
 
-The agent must inspect the existing implementation and document the proposed changes. It must NOT modify application code, components, styles, routes, database schemas, migrations, environment variables, or configuration files without explicit user approval.
+| Marker | Status | Meaning |
+| --- | --- | --- |
+| `- [ ]` | **Pending** | Not started, or started but not yet verified. |
+| `- [x]` | **Complete** | Implemented **and** verified with evidence recorded in the phase summary. |
+| `- [-]` | **Blocked** | Cannot be completed right now. A blocked task must name the blocker and what is required to unblock it. |
 
-The agent may update this "agent.md" file to document findings and checklist progress.
+Do not use any other marker. `[-]` is never a substitute for "I did not check".
 
-Objective
+### 0.2 Before beginning any phase
 
-Replace the existing user dashboard menu label Account Settings with Settings and plan a Settings page that lets authenticated users manage their profile, security, and display currency.
+1. Review this `AGENTS.md` in full.
+2. Read the status of every task in every phase.
+3. Determine what is complete, what is pending, and what is blocked.
+4. Report that assessment, then work **only** on the current approved phase.
 
-Keep the implementation minimal and consistent with the existing Boarvest dashboard design.
+Never assume a phase is next just because the previous one is complete — approval is required.
 
-Implementation Checklist
+### 0.3 After completing a phase
 
-The agent must inspect the existing codebase and maintain this checklist. Mark an item "✅" only after its corresponding work has actually been implemented and verified. During the planning phase, all implementation items must remain unchecked.
-
-Phase 1: Inspect and Plan
+1. Update the checklist markers in this file for the tasks worked on.
+2. Write a phase summary immediately below that phase's checklist:
+   - completed tasks and the evidence for each,
+   - blocked tasks and precisely what is required,
+   - any task deliberately left pending and why,
+   - files touched (documentation only unless code work was approved).
+3. **STOP.**
+4. Request owner approval before proceeding.
 
-- [x] Locate the existing Account Settings navigation item and page.
-- [x] Locate the existing dashboard navigation component and determine how menu labels and routes are configured.
-- [x] Locate the current Sign Out button and inspect its existing logout implementation.
-- [x] Inspect the existing Supabase authentication and profile-data implementation.
-- [x] Identify where the authenticated user's full name, email, user ID, and account creation date come from.
-- [x] Determine which profile fields can safely be edited using the current schema.
-- [x] Inspect existing password-change and password-reset functionality.
-- [x] Inspect existing dashboard balance and earned-profit components.
-- [x] Identify how the selected display currency could persist across sessions.
-- [x] Determine whether an existing, approved cryptocurrency exchange-rate source is available.
-- [x] Document the proposed files to change and the purpose of each change.
-- [x] Identify any required database migration, environment variable, or external service before proposing it.
-- [x] Present the implementation plan for user approval.
-
-Phase 1 Findings
+### 0.4 Controller rules
 
-- Navigation is defined in `components/dashboard/DashboardShell.tsx`. The secondary item is currently labeled `Account Settings` and links to `/dashboard/settings`; the page exists at `app/dashboard/settings/page.tsx` but renders only a `WorkspacePlaceholder`.
-- `components/dashboard/DashboardShell.tsx` receives `userEmail` and `displayName` from each server-rendered dashboard page. Its sidebar sign-out control is `components/auth/SignOutButton.tsx`, which calls the browser Supabase client's `auth.signOut()`, then replaces the route with `/login` and refreshes the router.
-- Authentication uses `components/auth/AuthForm.tsx`, `lib/supabase/client.ts`, `lib/supabase/server.ts`, `lib/supabase/proxy.ts`, `proxy.ts`, and `app/auth/callback/route.ts`. Signup stores `full_name` in Supabase Auth `user_metadata`; the inspected code does not define a separate profile table or profile migration.
-- The dashboard derives the display name from `user.user_metadata.display_name`, `full_name`, or `name`. Email comes from `user.email`. The user ID is available as `user.id` in the authenticated Supabase user object. Account creation date is available from Supabase Auth's user record (`created_at`), but the current dashboard does not pass or render it.
-- Based on the inspected migrations, only `admin_memberships`, `deposit_requests`, and `account_ledger` are defined. No editable profile columns are present. The safest initial editable profile field is the Auth metadata `full_name`, updated only for the authenticated user through Supabase Auth; email and user ID should remain read-only. A separate profile table would require an approved migration and RLS policy.
-- Password functionality currently consists of Supabase password sign-in/sign-up in `components/auth/AuthForm.tsx`, email reset in `app/forgot-password/page.tsx`, and `auth.updateUser({ password })` in `app/reset-password/page.tsx`. There is no authenticated in-dashboard change-password form yet.
-- `app/dashboard/page.tsx` currently queries the user-scoped `account_ledger.amount_usd` rows and calculates the total balance from USD ledger amounts. Earned profit and portfolio values remain placeholders (`$0.00`) and have no data source. The existing deposit flow and Transactions route must not be changed for this work.
-- No persistence mechanism for display currency exists. A user-scoped Auth metadata field could persist a preference without changing financial records, but this must be confirmed against the project's Supabase Auth metadata policy; a dedicated preferences/profile table with RLS is the more explicit option and requires a migration.
-- `app/api/market-prices/route.ts` already fetches SOL, ETH, and BNB USD prices from CoinGecko with short-lived caching. The repository does not establish that CoinGecko is an approved production exchange-rate source, so rates must not be treated as approved until that dependency is explicitly accepted and its failure/staleness behavior is defined.
-- No new environment variable is required by the inspected existing market-price route. A schema migration and RLS policy would be required only if persisted preferences or editable profile data use a new table; no migration should be created or applied before approval.
-
-Proposed implementation files (after approval only)
-
-- `components/dashboard/DashboardShell.tsx`: rename the navigation label to `Settings` while preserving `/dashboard/settings`.
-- `app/dashboard/settings/page.tsx`: replace the placeholder with the authenticated settings page and server-side user data loading.
-- New small settings client component(s), likely under `components/dashboard/`: handle profile form validation, password actions, currency selection, status messaging, and sign-out presentation without moving authorization to the client.
-- `app/dashboard/page.tsx` and shared dashboard display components: apply a persisted display preference to supported USD balance/profit displays only, preserving USD as the accounting unit and leaving ledger/transactions unchanged.
-- `app/api/market-prices/route.ts`: reuse or harden the existing CoinGecko-backed route only after approval of it as the exchange-rate source; do not invent fallback rates.
-- `supabase/migrations/<timestamp>_...sql` (only if approved): add a user-scoped preferences/profile model and RLS policies, if Auth metadata is not approved for persistence.
-- `lib/supabase/client.ts` / `lib/supabase/server.ts`: likely no changes; reuse the existing SSR-safe clients unless a narrowly scoped server action or route handler requires a new helper.
+- Do **not** automatically move to the next phase.
+- Do **not** skip phases, even when a later phase looks related or easier.
+- Do **not** start a phase's work before its approval is recorded in §0.6.
+- If a task is already implemented in the codebase: verify it, mark it `[x]`, and include the evidence in the summary. Implementation alone is not verification.
+- If a task cannot be completed: mark it `[-]` and state exactly what is required (credential, owner decision, environment access, migration, etc.).
+- Never mark `[x]` from code inspection alone when the task asks to *verify behaviour*. Behavioural claims need a runtime observation or the owner's explicit manual confirmation, and the summary must say which.
+- Do not re-open completed tasks without a stated reason (regression, new evidence, owner request).
 
-Safe conversion approach
+### 0.5 Documentation-only rule
 
-- Keep every ledger, deposit request, transaction, and accounting calculation in USD. Store the selected display currency separately from financial records.
-- For USD, render the USD amount directly. For SOL, ETH, and BNB, fetch a timestamped, validated USD-per-token rate from the approved server-side source and calculate `displayAmount = usdAmount / usdPerToken`, with explicit symbol/asset labeling such as `≈ 0.00 SOL`; do not imply asset ownership.
-- Convert only presentation values, round only at display time, and never write converted values back to `account_ledger` or any transaction table. Show a clear unavailable/stale-rate state instead of a fabricated or cached-too-old rate.
-- Prevent double conversion by keeping a canonical USD value in the data loader and passing currency plus rate into a single formatter. Profit must be converted from a verified USD profit source; the current `$0.00` placeholder is not a verified source and should not be presented as live converted profit.
+This task is **documentation changes only**:
 
-Recommended implementation sequence
+- Do not modify application functionality.
+- Do not modify database schema or migrations.
+- Do not modify Supabase configuration.
 
-1. Approve the settings scope, the editable `full_name` storage approach, and whether CoinGecko is an approved rate source.
-2. Preserve `/dashboard/settings`, rename only the navigation label, and build the authenticated settings shell.
-3. Add server-authorized profile loading/update behavior with validation and explicit ownership checks.
-4. Reuse the existing Supabase reset flow and add an in-settings password action without changing session handling or sign-out semantics.
-5. Add currency preference persistence, then wire only verified USD-backed balance/profit displays through a single conversion formatter.
-6. Add focused verification for settings, auth flows, currency persistence/conversion, and regression checks for deposits, Transactions, and admin access before broader validation commands.
+Agents may edit `AGENTS.md`. Any other change requires explicit owner approval and its own phase.
 
-Phase 2: Settings Navigation and Layout
+### 0.6 Approval log
 
-Do not begin until implementation is explicitly approved.
+Record each owner approval here before starting the phase. Do not pre-fill future approvals.
 
-- [x] Rename the user dashboard navigation label from "Account Settings" to "Settings".
-- [x] Preserve the existing route if practical; avoid unnecessary route changes.
-- [x] Display the page heading "SETTINGS".
-- [x] Display the description: "Manage your personal information and account security.".
-- [x] Build a responsive Profile Information section.
-- [x] Build a responsive Security section.
-- [x] Build a responsive Account Preferences section.
-- [x] Keep Account Actions and account deletion outside the initial implementation.
-- [x] Preserve the existing visual design and mobile usability.
+| Phase | Status | Approved by | Date |
+| --- | --- | --- | --- |
+| Phase 1 — Infrastructure | Pending approval | — | — |
+| Phase 2 — Authentication | Not started | — | — |
+| Phase 3 — Admin Access | Not started | — | — |
+| Phase 4 — Deposits | Not started | — | — |
+| Phase 5 — Future Features | Not started | — | — |
 
-Phase 2 Implementation Summary
+---
 
-- Implemented the Settings navigation label and retained `/dashboard/settings`.
-- Replaced the placeholder with an authenticated, responsive settings layout containing Profile Information, Security, and Account Preferences sections. Each section is explicitly presented as layout-only with future functionality marked as coming soon.
-- Changed files: `components/dashboard/DashboardShell.tsx`, `app/dashboard/settings/page.tsx`, `app/dashboard/dashboard.css`, and this checklist.
-- Validation: `npm run lint` passed with one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`; `npx tsc --noEmit` passed; `npm run build` passed; browser verification reached the protected route and correctly redirected unauthenticated access to `/login?next=/dashboard/settings` at the requested 538x890 viewport.
-- Remaining work: all Phase 3 and later checklist items remain unchecked; no profile editing, password changes, currency persistence, or account actions were implemented. Authenticated visual rendering remains unverified because no test credentials were available.
+## 1. Project Snapshot (verified from the repository)
 
-Phase 3: Profile Information
+**Stack:** Next.js 16.4.3 (App Router), React 19, TypeScript 6, Supabase (`@supabase/ssr`, `@supabase/supabase-js`), ESLint 10, Tailwind 4. Node.js 24 is the documented runtime; `.github/workflows/ci.yml` defines CI.
 
-- [x] Display the authenticated user's full name.
-- [x] Display the user's email address as read-only initially.
-- [x] Display the user's ID as read-only.
-- [x] Display the account creation date if available.
-- [x] Allow editing only of profile fields supported by the existing data model.
-- [x] Add a Save Changes button.
-- [x] Validate form input and display clear success or error messages.
-- [x] Ensure users can access and update only their own profile information.
-- [x] Verify profile changes persist after refreshing the page.
+**Authentication and session plumbing**
 
-Phase 3 Implementation Summary
+- `components/auth/AuthForm.tsx` — signup, login, password fields, `full_name` stored in Auth `user_metadata`.
+- `components/auth/SignOutButton.tsx` — `auth.signOut()` then navigate to `/login`.
+- `lib/supabase/client.ts` (browser), `lib/supabase/server.ts` (server), `lib/supabase/proxy.ts` + `proxy.ts` (session refresh).
+- `app/auth/callback/route.ts` — exchanges `code`, honours `next`; `app/auth/redirect/route.ts`; `app/auth/error/page.tsx`.
+- Password reset: `app/forgot-password/page.tsx` → `/auth/callback?next=/reset-password` → `app/reset-password/page.tsx`.
 
-- Implemented an authenticated profile information editor that reads the current Supabase Auth user and updates only the supported `full_name` user metadata field with `auth.updateUser`, leaving email and ID read-only.
-- Added account creation date display, client-side name validation, accessible status messaging, and a Save Changes action that refreshes the server-rendered dashboard after success.
-- Ownership is enforced by using the browser Supabase client with the current authenticated session and calling `auth.updateUser`; the implementation accepts no user ID or privileged fields as update input. Code inspection confirms it cannot target another user's profile, roles, balances, deposits, ledger entries, or admin data.
-- Manual v0 preview testing verified successful save feedback, empty-name validation, persistence after refresh, and persistence after logout and login. This satisfies the profile persistence requirement; authenticated runtime ownership isolation was supported by code inspection rather than a multi-user penetration test.
-- Removed the misleading Profile Information `Coming soon` label while retaining the label on the still-deferred Security and Account Preferences sections. The label was initially still visible because `SettingSection` defaulted every section badge to `Coming soon`; the profile section now explicitly passes `badge={null}`.
-- Changed files: `components/dashboard/ProfileInformation.tsx`, `app/dashboard/settings/page.tsx`, `app/dashboard/dashboard.css`, and this checklist. The current discrepancy fix changes only `app/dashboard/settings/page.tsx` and this checklist.
-- Validation: `npm run lint` passed with one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`; `npx tsc --noEmit` passed; `npm run build` passed; unauthenticated access to `/dashboard/settings` redirected to `/login?next=/dashboard/settings` at the requested 538x890 viewport. Manual authenticated preview checks passed as noted above.
-- Remaining limitations: email changes, password changes, currency persistence/conversion, and account actions remain deferred to later phases. No database migration, environment variable, service-role key, deposit, Transactions, or admin-dashboard changes were made.
+**Admin authorization**
 
-Phase 4: Security
+- `lib/auth/admin.ts` — `getCurrentAdmin()` reads `admin_memberships` for the signed-in user (server-only).
+- `app/admin/page.tsx`, `app/api/admin/users/route.ts`, `app/api/admin/deposits/route.ts`, `app/api/admin/deposits/[id]/review/route.ts`.
+- The admin user directory requires the server-only `SUPABASE_SERVICE_ROLE_KEY`.
 
-- [x] Add a Change Password action using the existing Supabase Auth implementation.
-- [x] Provide the required password fields according to the existing authentication flow.
-- [x] Add a show/hide password control where password fields are displayed.
-- [x] Provide a secure password-reset flow.
-- [x] Move or expose the existing Sign Out action within the Settings Security section.
-- [x] Preserve the existing logout behaviour and session handling.
-- [ ] Verify that password operations and sign-out work correctly.
+**Deposits and accounting**
 
-Phase 4 Implementation Summary
+- `app/api/deposits/route.ts`, `app/api/deposits/mine/route.ts`, `app/dashboard/deposits/page.tsx`, `app/dashboard/transactions/page.tsx`.
+- `app/api/admin/deposits/[id]/review/route.ts` calls the `review_deposit_request(p_deposit_id, p_decision, p_review_note)` RPC and maps missing-function errors (`42883`, `PGRST202`) and missing-table (`42P01`) to HTTP 503 "migration must be applied".
 
-- Added `components/dashboard/SecuritySettings.tsx` with current-password reauthentication through the authenticated user's email, password confirmation and minimum-length validation, show/hide controls, and `auth.updateUser({ password })` for the current session only. Password values are never stored in application data or metadata.
-- Reused the existing `/forgot-password` and `/reset-password` flow through a link, and reused `components/auth/SignOutButton.tsx` for logout and redirect behavior.
-- Updated `app/dashboard/settings/page.tsx` to render the Security section and added narrowly scoped responsive styles in `app/dashboard/dashboard.css`.
-- Validation and remaining issues: authenticated password-change and sign-out runtime verification require an authorized test account and are not claimed here. The existing reset flow was reused by code inspection. `npm run lint` passed with one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`; `npx tsc --noEmit` passed; and `npm run build` passed. No schema, environment, deposit, Transactions, or admin-dashboard changes were made.
+**Database schema (from `supabase/migrations/`)**
 
-Phase 5: Account Preferences — Display Currency
+- `20261017000000_create_admin_memberships.sql` — `public.admin_memberships` + RLS: a user may view only their own membership row.
+- `20261019000000_create_deposit_accounting.sql` — `public.deposit_requests`, `public.account_ledger`, and the functions `public.review_deposit_request`, `public.assert_deposit_ledger_integrity`, `public.reject_ledger_mutation`, `public.reject_reviewed_deposit_mutation`; RLS lets users see/create only their own pending deposits and see only their own ledger rows, while admins can view deposits and ledger.
 
-Phase 5 Implementation Summary
+Finding these files proves the schema is **declared**, not that it is **applied** to the Supabase project. Phase 1 verifies the deployed database.
 
-- Scope: add a Display Currency selector with exactly USD (US Dollar), SOL (Solana), ETH (Ethereum), and BNB (BNB).
-- Persistence: store the authenticated user's selected display preference in an approved user-scoped location. Confirm whether Supabase Auth metadata is acceptable; otherwise propose a preferences table with RLS before making schema changes.
-- Accounting model: retain USD as the canonical accounting currency. Do not modify ledger, deposit, transaction, balance, or investment records.
-- Display conversion: convert supported USD balance and verified earned-profit values only at render time through one formatter. For SOL, ETH, and BNB, use a validated, timestamped USD-per-asset rate from an approved server-side source; never invent fallback rates or imply asset ownership.
-- Failure handling: show an explicit unavailable or stale-rate state when a rate cannot be trusted, and prevent double conversion. Portfolio conversion remains deferred until a verified portfolio data source exists.
-- Verification: test selector behavior, persistence across refresh and sessions, conversion accuracy, stale/unavailable rates, and regression safety for deposits, Transactions, ledger data, and admin access.
-- Implemented `components/dashboard/CurrencyPreference.tsx` with exactly USD, SOL, ETH, and BNB options; the selected value persists in the authenticated user's Supabase Auth metadata as `display_currency`.
-- Implemented display-only conversion for the dashboard's canonical USD total balance through `components/dashboard/CurrencyDisplay.tsx`; ledger and financial workflows remain USD-only. The existing server-side market-price route is reused, with finite positive values and a two-minute freshness check; unavailable or stale rates show `Rate unavailable`.
-- Earned profit and portfolio values remain unchanged because the current profit and portfolio values are placeholders, not verified USD data sources.
-- Phase 5 status: implemented with outstanding verification. No schema, environment, deposit, Transactions, or admin-dashboard changes were made.
+**Environment variables** (see `.env.example`)
 
-The available display currency options must be:
+- `NEXT_PUBLIC_SUPABASE_URL` — project URL.
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — public key (current name; `NEXT_PUBLIC_SUPABASE_ANON_KEY` is legacy and unused).
+- `SUPABASE_SERVICE_ROLE_KEY` — server-only; required by admin routes.
+- `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL` — optional local callback override (documented example is `http://localhost:3000/auth/callback`; a localhost value must never be used in production).
 
-- USD — US Dollar
+Never print, commit, or paste secret values. Presence checks only.
 
-- SOL — Solana
+**Validation commands** (run from the repository root)
 
-- ETH — Ethereum
+- `npm run lint`
+- `npx tsc --noEmit`
+- `npm run build`
+- `scripts/test-local-supabase.sh` — local Supabase smoke script.
 
-- BNB — BNB
+Record the actual output of each command. Never mark validation complete when it failed or was not run.
 
-- [x] Add a Display Currency selector with exactly USD, SOL, ETH, and BNB.
+---
 
-- [x] Use USD as the underlying accounting currency.
+## 2. Phase Controller
 
-- [x] Persist the user's selected display currency across sessions through authenticated Supabase Auth metadata.
+### Phase 1 — Infrastructure
 
-- [x] Update the supported dashboard total balance display to reflect the selected currency at render time.
+- [ ] Verify Supabase connection
+- [ ] Verify environment variables
+- [ ] Verify database schema
+- [ ] Verify admin_memberships table
+- [ ] Verify deposit_requests table
+- [ ] Verify account_ledger table
+- [ ] Verify review_deposit_request RPC
 
-- [ ] Update supported earned-profit displays to reflect the selected currency; deferred because the current value is an unverified placeholder.
+**Evidence expected:** a successful authenticated read (e.g. an authenticated page or `select` returning rows/empty set rather than a configuration error), presence-only checks for each required variable, and confirmation that each table/RPC is reachable through the project's API (missing relations return `42P01`; missing functions return `42883`/`PGRST202`). Migration files alone do not satisfy "applied".
 
-- [ ] Ensure portfolio values use the selected display currency when the portfolio integration is implemented.
+**STOP AND REQUEST APPROVAL**
 
-- [ ] Avoid counting balances or earnings twice.
+#### Phase 1 Summary
 
-- [ ] Ensure changing display currency never changes actual financial balances or ledger entries.
+_Not started. Awaiting owner approval._
 
-- [ ] Do not imply that displaying a SOL, ETH, or BNB equivalent means the user owns that cryptocurrency.
+---
 
-- [x] Inspect and reuse the existing exchange-rate source (`app/api/market-prices/route.ts`).
+### Phase 2 — Authentication
 
-- [x] Never invent live rates or present mock rates as real market prices.
+- [ ] Verify signup
+- [ ] Verify login
+- [ ] Verify logout
+- [ ] Verify password reset
+- [ ] Verify protected routes
 
-- [x] Show an unavailable state for missing, invalid, or stale rates.
+**Evidence expected:** observed behaviour for each flow (redirect target, session cookie, visible result), plus `proxy.ts` / `lib/supabase/proxy.ts` behaviour for unauthenticated access to `/dashboard/*` and `/admin`. Note the known outstanding password-reset redirect defect recorded in §5; retest it end to end before marking it complete.
 
-Phase 6: Account Actions — Deferred
+**STOP AND REQUEST APPROVAL**
 
-Account deletion is explicitly out of scope for this task.
+#### Phase 2 Summary
 
-- [ ] Do not add a Request Account Deletion button.
-- [ ] Do not create account-deletion APIs or database operations.
-- [ ] Revisit this feature only after an appropriate administrative review and response workflow has been planned.
+_Not started. Awaiting owner approval._
 
-Phase 7: Testing and Verification
+---
 
-Do not mark an item complete without evidence of implementation and verification.
+### Phase 3 — Admin Access
 
-- [ ] Verify the Settings navigation label and route.
-- [ ] Test profile validation and saving.
-- [ ] Test password-change and password-reset flows.
-- [ ] Test Sign Out.
-- [ ] Test currency selection and persistence.
-- [ ] Verify balance and earned-profit displays use the selected currency correctly.
-- [ ] Confirm display conversion does not modify financial records.
-- [ ] Confirm existing deposit functionality remains intact.
-- [ ] Confirm the existing user Transactions page remains intact.
-- [ ] Confirm admin authorization and admin dashboard functionality remain intact.
-- [ ] Run "npm run lint".
-- [ ] Run "npx tsc --noEmit".
-- [ ] Run "npm run build".
-- [ ] Record the actual result of each validation command.
+- [ ] Verify admin account setup
+- [ ] Verify admin_memberships authorization
+- [ ] Verify admin dashboard access
+- [ ] Verify admin API protection
 
-Security Rules
+**Evidence expected:** an authorised admin can load `/admin`; a signed-in non-admin gets no admin data (not merely a hidden link), and each `/api/admin/*` route returns 403 without an `admin_memberships` row. Confirm the service-role key is only read server-side.
+
+**STOP AND REQUEST APPROVAL**
+
+#### Phase 3 Summary
+
+_Not started. Awaiting owner approval._
+
+---
+
+### Phase 4 — Deposits
+
+- [ ] Verify deposit creation
+- [ ] Verify pending deposits
+- [ ] Verify deposit approval
+- [ ] Verify deposit decline
+- [ ] Verify accounting update behavior
+
+**Evidence expected:** a deposit created as a user appears as pending, approval and decline each produce the correct `deposit_requests` state, and approval writes the matching `account_ledger` entry exactly once. Confirm the ledger mutation guards reject later edits and that review is admin-only. Create test records only; do not mutate existing financial data.
+
+**STOP AND REQUEST APPROVAL**
+
+#### Phase 4 Summary
+
+_Not started. Awaiting owner approval._
+
+---
+
+### Phase 5 — Future Features
+
+- [ ] Withdrawals
+- [ ] Audit logs
+- [ ] Reporting improvements
+- [ ] Portfolio management
+
+**Evidence expected:** this phase is implementation work, not verification. Each item needs an approved scope, its own design notes, and explicit authorisation before any code, schema, or configuration change. Until then every item stays `[ ]` Pending.
+
+**STOP AND REQUEST APPROVAL**
+
+#### Phase 5 Summary
+
+_Not started. Awaiting owner approval._
+
+---
+
+## 3. Phase Summary Template
+
+Use this shape for every phase summary so the next agent can resume without guessing:
+
+```text
+#### Phase N Summary — YYYY-MM-DD
+
+- Completed: task text → evidence (command output, HTTP status, observed UI, owner confirmation).
+- Blocked: task text → [-] reason → what is required to unblock.
+- Pending on purpose: task text → why it was not attempted this phase.
+- Files changed: AGENTS.md only (unless code work was approved).
+- Next step: awaiting owner approval for Phase N+1.
+```
+
+No summary means the phase is not finished, even if the checkboxes look right.
+
+---
+
+## 4. Standing Rules
+
+### 4.1 Security
 
 - Never commit secrets, API keys, service-role keys, or database credentials.
-- Never expose "SUPABASE_SERVICE_ROLE_KEY" in frontend code or client components.
-- Treat privileged Supabase credentials as server-only.
-- Never allow Settings to modify account balances, deposit approvals, ledger entries, investment records, or administrative privileges.
-- Never allow a user to access or update another user's profile.
+- Never expose `SUPABASE_SERVICE_ROLE_KEY` in frontend code or client components; keep privileged Supabase credentials server-only.
+- Never allow settings or profile features to modify account balances, deposit approvals, ledger entries, investment records, or administrative privileges.
+- Never allow a user to access or update another user's profile or another admin's data.
 - Do not run destructive database operations against production financial data.
+- Report secret presence, never secret values.
 
-Supabase Rules
+### 4.2 Supabase
 
-- Use the browser client in client components.
-- Use the server client in server actions and route handlers.
-- Follow existing SSR-safe authentication patterns.
-- If a schema change is necessary, document it and propose a migration under "supabase/migrations" before requesting approval.
-- Do not apply schema changes without explicit authorization.
+- Use the browser client in client components, the server client in server actions and route handlers.
+- Follow the existing SSR-safe authentication patterns.
+- A schema change must be documented and proposed under `supabase/migrations/` before approval; never apply one without explicit authorisation.
+- Do not change Supabase configuration (URLs, redirect allow-lists, email templates, RLS) as part of a documentation or verification phase — report the required change instead.
 
-Code Standards
+### 4.3 Code standards
 
-- Keep components small, typed, and reusable.
-- Follow the existing Next.js App Router conventions.
-- Inspect repository-specific implementations before proposing changes.
-- Avoid unrelated refactors.
-- Preserve existing authentication and redirect behaviour.
+- Keep components small, typed, and reusable; follow existing App Router conventions.
+- Inspect repository-specific implementations before proposing changes; avoid unrelated refactors.
+- Preserve existing authentication, redirect, and logout behaviour.
 
-Required Agent Behaviour
+### 4.4 Validation and reporting
 
-1. Begin in planning mode.
-2. Inspect the repository and identify the relevant files.
-3. Update this checklist only when findings are supported by actual inspection or implementation.
-4. Keep implementation checkboxes unchecked until the corresponding feature has been implemented and verified.
-5. Document the proposed files to change, expected behaviour, risks, and required dependencies.
-6. Stop and present the plan for approval before modifying application code.
-7. After approval, implement only the approved scope.
-8. Report completed work, incomplete work, validation results, and any blockers.
-9. Do not merge branches, push changes, or deploy without explicit authorization.
+- Run the validation commands listed in §1 when a phase requires them, and paste their real results.
+- If a command fails, report the actual error; do not mark the task complete.
+- Distinguish agent-executed evidence, owner-reported evidence, and code inspection in every summary.
+- Never claim a feature works unless it was tested.
 
-Validation Commands
+### 4.5 Branch and PR expectations
 
-Run when implementation is approved and the relevant environment is available:
+- Do not merge branches, push, or deploy without explicit authorisation.
+- Keep changes scoped to the approved phase; document any environment, schema, or authentication impact.
+- Preserve working deposit, transactions, and admin functionality.
 
-- "npm run lint"
-- "npx tsc --noEmit"
-- "npm run build"
+---
 
-If a command fails, report the actual error. Do not mark the validation as successful.
+## 5. Archive — Completed Work (do not re-open without a reason)
 
-PR Expectations
+This section records earlier, separately approved work so it is not redone. These are historical summaries, not active phase tasks.
 
-- Keep changes scoped to the approved Settings feature.
-- Document changes to environment variables, database schema, or authentication behaviour.
-- Preserve working deposit, Transactions, and admin functionality.
-- Do not claim that a feature works unless it has been tested.
-
-## Phase 4 Security Audit — 2026-10-22
-
-### Verified repository and branch state
-
-- Repository: `Snr-Dave/Boarvest` (`origin` points to `https://github.com/Snr-Dave/Boarvest.git`).
-- Working tree branch: `feat/settings-security`.
-- `feat/settings-security` exists locally and as `origin/feat/settings-security`.
-- The configured remote also contains `origin/dev`.
-- `git ls-remote` reports `dev` and `feat/settings-security` at the same commit (`3222565`), so the inspected Security implementation is present on both remote branch refs at the time of this audit. No branch, merge, push, or deployment was performed.
-- This repository contains `AGENTS.md`; an `AGENT.md` file does not exist. This audit was recorded in the existing `AGENTS.md` without creating a second instruction file.
-
-### Phase 4 requirement audit
-
-- [x] **1. Change Password action — Implemented; user-reported manual verification passed.** `components/dashboard/SecuritySettings.tsx` reauthenticates with `auth.signInWithPassword` and calls `auth.updateUser({ password: newPassword })`.
-- [x] **2. Required password fields and validation — Implemented; code-inspected, not independently runtime-tested by the agent.** Current password, new password, and confirmation are required; the new password has an eight-character minimum, must match confirmation, and must differ from the current password.
-- [x] **3. Show/hide password controls — Implemented; code-inspected.** The Security form toggles all password inputs between `password` and `text`.
-- [ ] **4. Password-reset flow and configuration — Partially implemented / blocked by redirect defect.** The app requests `${window.location.origin}/auth/callback?next=/reset-password`, the callback exchanges the code, and `/reset-password` calls `auth.updateUser({ password })`. The end-to-end flow is not complete until the reported deployed-link failure is resolved.
-- [x] **5. Sign Out in Security settings — Implemented; user-reported manual verification passed.** `SecuritySettings` renders the existing `SignOutButton`.
-- [x] **6. Existing logout and session handling preserved — Implemented; code-inspected and supported by the user-reported Sign Out pass.** `SignOutButton` calls `auth.signOut()`, replaces the route with `/login`, and refreshes the router; no session helper or proxy changes were made.
-- [x] **7. Password-change functionality — Implemented and user-reported as passed.** “Password updated successfully.” was displayed. This is user-reported evidence, not an independently executed agent test.
-- [x] **8. Sign Out functionality — Implemented and user-reported as passed.** This is user-reported manual evidence, not an independently executed agent test.
-- [x] **9. Password-reset email delivery — Implemented and user-reported as passed.** Delivery was reported successful; the agent did not send or inspect an email.
-- [ ] **10. Password-reset link and recovery end to end — Blocked by unresolved defect.** The link redirected to `localhost:3000` and returned `otp_expired` / `access_denied`. The code does not hardcode localhost in the forgot-password path, but signup still uses optional `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL`, whose documented example is `http://localhost:3000/auth/callback`. This makes an environment/template/configuration mismatch plausible, but does not prove the root cause. Reused, expired, malformed, or otherwise invalid recovery links are also possible.
-- [x] **11. Security “Coming soon” badge — Implemented.** The Security section now passes `badge={null}` in `app/dashboard/settings/page.tsx`, matching the completed Profile Information section.
-
-### Phase 4 implementation and verification summary
-
-The Security interface is implemented in `components/dashboard/SecuritySettings.tsx`, rendered by `app/dashboard/settings/page.tsx`, and styled in `app/dashboard/dashboard.css`. Phase 4 is **implemented with outstanding work**, not fully complete: password change, Sign Out, and forgot-password email delivery passed manual testing, while the complete password-reset link flow remains unresolved.
-
-### User-reported manual test results
-
-- Password change: **PASSED** — manually tested successfully; “Password updated successfully.” displayed.
-- Sign Out: **PASSED** — manually tested successfully.
-- Forgot-password email delivery: **PASSED**.
-- Password-reset link: **OUTSTANDING** — redirects to `localhost:3000` and returns `otp_expired` / `access_denied`.
-
-### Password-reset cause assessment and Supabase checks
-
-- **Confirmed:** `app/forgot-password/page.tsx` builds the callback URL from the browser's `window.location.origin`; `app/auth/callback/route.ts` exchanges a `code` and redirects to `/reset-password`; `app/reset-password/page.tsx` updates the password only after a valid Supabase recovery session. The current code has no literal localhost in the forgot-password redirect.
-- **Likely configuration area:** check Supabase Authentication → URL Configuration → **Site URL** and **Redirect URLs**. The production Site URL should be the actual deployed Boarvest origin; the exact production domain is not present in this repository, so it is not recorded here. The allow-list should include the production callback pattern `<production-origin>/auth/callback` and the local development callback `http://localhost:3000/auth/callback` (or the exact local origin used). If query strings are validated by the project configuration, also allow the callback target used by the app, `/auth/callback?next=/reset-password`, or use the project's documented wildcard/pattern syntax.
-- **Email template:** inspect the Supabase password-reset template and ensure its generated link preserves the app's configured redirect target rather than substituting `http://localhost:3000`. Do not replace the app's runtime origin with a guessed production URL.
-- **Other checks:** verify the deployed app is actually generating the email from the production origin, `NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL` is not set to localhost in production, and the clicked recovery link is fresh and used only once. These are checks, not confirmed findings; the agent did not access the Supabase dashboard or change settings.
-- **Smallest safe fix:** first correct the Supabase URL/allow-list/template or production environment mismatch, then retest the existing callback flow end to end. Code changes are not indicated by this inspection unless configuration verification shows the deployed origin is unavailable to the current runtime; no code, environment, or Supabase setting was changed in this audit.
-
-### Audit validation performed
-
-- Inspected the current branch, local/remote refs, reset pages, callback route, Supabase browser/server/proxy helpers, settings page, and relevant auth references.
-- Verified `dev` and `feat/settings-security` both exist on `origin` and point to commit `3222565`; the current working branch is `feat/settings-security`. No branch, merge, push, deploy, email, password, or Supabase setting was changed.
-- Validation: `npm run lint`, `npx tsc --noEmit`, and `npm run build` passed. Lint reported one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`; no new problems were reported.
-
-### Remaining work before Phase 4 is fully verified
-
-1. Verify the production Supabase Site URL, Redirect URLs allow-list, password-reset email template, and production environment origin.
-2. Retest a fresh production reset email from link open through password update and subsequent sign-in.
-3. Resolve the password-reset redirect/recovery failure and retest a fresh link end to end; do not mark item 10 complete until it passes.
-4. Preserve the passing password-change, Sign Out, and email-delivery results in future audit updates.
+- **Settings page (Phases 2–5 of the previous programme):** navigation label renamed to `Settings` with the route `/dashboard/settings` preserved; responsive Profile Information, Security, and Account Preferences sections built. Profile editing updates only Auth `full_name`; Security adds reauthenticated password change, show/hide controls, reset link, and the existing Sign Out; Account Preferences adds a USD/SOL/ETH/BNB display selector persisted in Auth metadata as `display_currency`, with display-only conversion of the total balance and a `Rate unavailable` state for missing/stale rates.
+- **Deferred by design:** earned-profit and portfolio conversion (both are unverified `$0.00` placeholders), and account deletion (no UI, API, or database work).
+- **Known outstanding defect:** the password-reset email link redirected to `localhost:3000` and returned `otp_expired` / `access_denied`. The code builds the callback from `window.location.origin`; the likely cause is a Supabase Site URL / Redirect URL / email-template mismatch, unproven. This must be retested in Phase 2 before password reset is marked complete.
+- **Previous validation:** `npm run lint` (one pre-existing `@next/next/no-img-element` warning in `app/dashboard/deposits/DepositInterface.tsx`), `npx tsc --noEmit`, and `npm run build` passed at the time of those phases. Re-run before relying on them.
