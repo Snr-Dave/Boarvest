@@ -74,7 +74,7 @@ Record each owner approval here before starting the phase. Do not pre-fill futur
 
 | Phase | Status | Approved by | Date |
 | --- | --- | --- | --- |
-| Phase 1 — Infrastructure | Pending approval | — | — |
+| Phase 1 — Infrastructure | Approved — executed 2026-11-03 (2 complete, 5 blocked) | Owner | 2026-11-03 |
 | Phase 2 — Authentication | Not started | — | — |
 | Phase 3 — Admin Access | Not started | — | — |
 | Phase 4 — Deposits | Not started | — | — |
@@ -136,21 +136,48 @@ Record the actual output of each command. Never mark validation complete when it
 
 ### Phase 1 — Infrastructure
 
-- [ ] Verify Supabase connection
-- [ ] Verify environment variables
-- [ ] Verify database schema
-- [ ] Verify admin_memberships table
-- [ ] Verify deposit_requests table
-- [ ] Verify account_ledger table
-- [ ] Verify review_deposit_request RPC
+- [x] Verify Supabase connection
+- [x] Verify environment variables
+- [-] Verify database schema
+- [-] Verify admin_memberships table
+- [-] Verify deposit_requests table
+- [-] Verify account_ledger table
+- [-] Verify review_deposit_request RPC
 
-**Evidence expected:** a successful authenticated read (e.g. an authenticated page or `select` returning rows/empty set rather than a configuration error), presence-only checks for each required variable, and confirmation that each table/RPC is reachable through the project's API (missing relations return `42P01`; missing functions return `42883`/`PGRST202`). Migration files alone do not satisfy "applied".
+**Evidence expected:** a successful authenticated read (e.g. an authenticated page or `select` returning rows/empty set rather than a configuration error), presence-only checks for each required variable, and confirmation that each table/RPC is reachable through the project's API (missing relations return `PGRST205`/`42P01`; missing functions return `42883`/`PGRST202`). Migration files alone do not satisfy "applied".
 
 **STOP AND REQUEST APPROVAL**
 
-#### Phase 1 Summary
+#### Phase 1 Summary — 2026-11-03
 
-_Not started. Awaiting owner approval._
+**Result: blocked on the database schema.** 2 of 7 tasks complete, 5 blocked. No application code, migration, or Supabase configuration was changed.
+
+**Completed**
+
+- `[x]` **Verify Supabase connection.** Evidence: from inside the running `web` container, `GET {project}/auth/v1/health` returned **200** and `GET {project}/rest/v1/` returned **200** with a parseable OpenAPI document. The configured URL is HTTPS on a `*.supabase.co` project, not the local placeholder.
+- `[x]` **Verify environment variables.** Evidence: presence and shape checked without reading values. `NEXT_PUBLIC_SUPABASE_URL` present — https, `supabase.co`, 20-character project ref, not `127.0.0.1`; `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` present — `sb_publishable_*`, 46 characters; `SUPABASE_SERVICE_ROLE_KEY` present — JWT shape, 219 characters. No placeholder values are in effect.
+
+**Blocked**
+
+- `[-]` **Verify database schema.** The PostgREST OpenAPI document at `/rest/v1/` exposes only `/` and zero definitions: the `public` schema is empty, so no migration object is live.
+- `[-]` **Verify admin_memberships table.** `404 PGRST205` — `Could not find the table 'public.admin_memberships' in the schema cache`.
+- `[-]` **Verify deposit_requests table.** `404 PGRST205` — `Could not find the table 'public.deposit_requests' in the schema cache`.
+- `[-]` **Verify account_ledger table.** `404 PGRST205` — `Could not find the table 'public.account_ledger' in the schema cache`.
+- `[-]` **Verify review_deposit_request RPC.** `404 PGRST202` — `Could not find the function public.review_deposit_request(p_decision, p_deposit_id, p_review_note) in the schema cache`; the OpenAPI document lists no `/rpc/review_deposit_request` path.
+
+**Blocker.** Both files in `supabase/migrations/` are declarations only; neither has been applied to the hosted Supabase project. Probes used the service-role key, so the 404s reflect missing objects, not RLS.
+
+**Required remediation (owner action — documentation-only scope forbids applying schema)**
+
+1. Apply, in order, `supabase/migrations/20261017000000_create_admin_memberships.sql` then `supabase/migrations/20261019000000_create_deposit_accounting.sql` to the project (Supabase SQL editor, or `supabase link` + `supabase db push`).
+2. The second migration creates `deposit_requests`, `account_ledger`, `review_deposit_request`, and the guard functions `assert_deposit_ledger_integrity`, `reject_ledger_mutation`, `reject_reviewed_deposit_mutation`. The guards are trigger functions and are not REST-exposed; they are verified indirectly in Phase 4.
+3. If the tables still return `PGRST205` afterwards, reload the API schema cache with `NOTIFY pgrst, 'reload schema';`.
+4. Re-run the Phase 1 probe; a `200` on each table read (service role) and `/rpc/review_deposit_request` in `/rest/v1/` closes the five remaining tasks.
+5. Phase 3 additionally needs an `admin_memberships` row for the administrator's user id; that is an owner setup step, not part of this phase.
+
+**Files changed:** `AGENTS.md` only. Probe scripts were run from `/tmp` inside the container and are not part of the repository.
+
+**Next step:** awaiting owner remediation and approval to re-run Phase 1. Phase 2 has not started.
 
 ---
 
