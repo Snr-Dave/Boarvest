@@ -58,15 +58,16 @@ Never assume a phase is next just because the previous one is complete — appro
 - Never mark `[x]` from code inspection alone when the task asks to *verify behaviour*. Behavioural claims need a runtime observation or the owner's explicit manual confirmation, and the summary must say which.
 - Do not re-open completed tasks without a stated reason (regression, new evidence, owner request).
 
-### 0.5 Documentation-only rule
+### 0.5 Scope rule
 
-This task is **documentation changes only**:
+Documentation-only mode ended on 2026-11-03 by owner instruction. From then on:
 
-- Do not modify application functionality.
-- Do not modify database schema or migrations.
-- Do not modify Supabase configuration.
+- Agents may edit `AGENTS.md` at any time to record findings, statuses, and summaries.
+- Any change outside `AGENTS.md` — database schema, Supabase configuration, application code, or migrations — requires an approved phase that explicitly authorises it.
+- Migration files in `supabase/migrations/` are inputs. Never edit them to make an apply succeed; record the first failing statement and its SQLSTATE instead.
+- No destructive database operation runs without an approved rollback plan in that phase.
 
-Agents may edit `AGENTS.md`. Any other change requires explicit owner approval and its own phase.
+The only change currently proposed (and **not** approved) is **Phase 1A — Database Migration Setup** in §2.
 
 ### 0.6 Approval log
 
@@ -75,7 +76,8 @@ Record each owner approval here before starting the phase. Do not pre-fill futur
 | Phase | Status | Approved by | Date |
 | --- | --- | --- | --- |
 | Phase 1 — Infrastructure | Approved — executed 2026-11-03 (2 complete, 5 blocked) | Owner | 2026-11-03 |
-| Phase 2 — Authentication | Not started | — | — |
+| Phase 1A — Database Migration Setup | **Proposed — awaiting approval** (no schema change applied) | — | — |
+| Phase 2 — Authentication | Not started — blocked behind Phase 1A / Phase 1 re-run | — | — |
 | Phase 3 — Admin Access | Not started | — | — |
 | Phase 4 — Deposits | Not started | — | — |
 | Phase 5 — Future Features | Not started | — | — |
@@ -169,7 +171,7 @@ Record the actual output of each command. Never mark validation complete when it
 
 **Required remediation (owner action — documentation-only scope forbids applying schema)**
 
-1. Apply, in order, `supabase/migrations/20261017000000_create_admin_memberships.sql` then `supabase/migrations/20261019000000_create_deposit_accounting.sql` to the project (Supabase SQL editor, or `supabase link` + `supabase db push`).
+1. Apply, in order, `supabase/migrations/20261017000000_create_admin_memberships.sql` then `supabase/migrations/20261019000000_create_deposit_accounting.sql` — planned and tracked as **Phase 1A — Database Migration Setup** (proposed, §2). That phase needs owner approval and DB access before these tasks can be re-verified.
 2. The second migration creates `deposit_requests`, `account_ledger`, `review_deposit_request`, and the guard functions `assert_deposit_ledger_integrity`, `reject_ledger_mutation`, `reject_reviewed_deposit_mutation`. The guards are trigger functions and are not REST-exposed; they are verified indirectly in Phase 4.
 3. If the tables still return `PGRST205` afterwards, reload the API schema cache with `NOTIFY pgrst, 'reload schema';`.
 4. Re-run the Phase 1 probe; a `200` on each table read (service role) and `/rpc/review_deposit_request` in `/rest/v1/` closes the five remaining tasks.
@@ -178,6 +180,122 @@ Record the actual output of each command. Never mark validation complete when it
 **Files changed:** `AGENTS.md` only. Probe scripts were run from `/tmp` inside the container and are not part of the repository.
 
 **Next step:** awaiting owner remediation and approval to re-run Phase 1. Phase 2 has not started.
+
+---
+
+### Phase 1A — Database Migration Setup (Proposed)
+
+**Status: proposed only. Nothing has been applied.** Created 2026-11-03 in response to the Phase 1 schema blockers. This phase is the approved-remediation path for the five blocked Phase 1 tasks.
+
+**Purpose:** apply the two existing migration files to the hosted Supabase project safely, verify the resulting schema, and re-run the Phase 1 probe.
+
+**Ordering:** Phase 1A → Phase 1 re-run → Phase 2. No later phase starts until Phase 1A is complete and Phase 1's blocked tasks are re-verified.
+
+**Files under review (inputs — must not be edited):**
+
+- `supabase/migrations/20261017000000_create_admin_memberships.sql`
+- `supabase/migrations/20261019000000_create_deposit_accounting.sql`
+
+#### Phase 1A Checklist
+
+- [ ] Owner approves Phase 1A and the row in §0.6 is updated
+- [ ] Confirm the execution channel and access (owner-run SQL editor, or CLI/`psql` with credentials)
+- [ ] Pre-flight: confirm the target is the empty project from Phase 1 and that `public` exposes no objects
+- [ ] Optional rehearsal on a disposable local Supabase (`supabase db reset`, then `supabase/tests/deposit-accounting.sql`)
+- [ ] Apply `20261017000000_create_admin_memberships.sql` as a single transaction
+- [ ] Apply `20261019000000_create_deposit_accounting.sql` as a single transaction
+- [ ] Reload the PostgREST schema cache (`NOTIFY pgrst, 'reload schema';`)
+- [ ] Verify tables: `admin_memberships`, `deposit_requests`, `account_ledger` with expected columns, 10 CHECK constraints, 3 indexes, RLS enabled
+- [ ] Verify policies and grants: 6 RLS policies (1 + 3 + 2), no client write access to `account_ledger`, no client write access to `admin_memberships`
+- [ ] Verify functions: 4 functions present, all triggers attached (including the deferred constraint trigger), `security definer` with empty `search_path`
+- [ ] Verify execution grants: `authenticated` may execute `review_deposit_request`; `anon` may not; guard functions executable by no client role
+- [ ] Re-run the Phase 1 probe and record the results in the Phase 1 summary
+- [ ] Record the rollback plan as reviewed (not executed)
+
+#### Objects that will be created
+
+**Migration 1 — `20261017000000_create_admin_memberships.sql`**
+
+- `public.admin_memberships`
+  - `user_id uuid` primary key, `references auth.users(id) on delete cascade`
+  - `created_at timestamptz not null default timezone('utc', now())`
+- RLS enabled; policy `Admins can view their own membership` (`select` to `authenticated` where `auth.uid() = user_id`)
+- `revoke insert, update, delete, truncate, references, trigger` from `anon` and `authenticated` — membership rows can only be provisioned by privileged SQL or the service role
+
+**Migration 2 — `20261019000000_create_deposit_accounting.sql`**
+
+- Extension `pgcrypto` (`create extension if not exists` — a no-op on Supabase; `gen_random_uuid()` is core since PostgreSQL 13 anyway)
+- `public.deposit_requests` — `id`, `reference` (`DEP-` + 12 hex, unique), `user_id` → `auth.users` (cascade), `asset`, `network`, `requested_usd numeric(12,2)`, `estimated_token_amount numeric(30,12)`, `destination_wallet`, `status` (default `pending`), `created_at`, `reviewed_at`, `reviewed_by` → `auth.users`, `review_note`
+- `public.account_ledger` — `id`, `user_id` → `auth.users` (cascade), `deposit_request_id` unique → `deposit_requests` (`on delete restrict`), `entry_type` (default `deposit_credit`), `amount_usd numeric(12,2)`, `created_at`, `created_by` → `auth.users`
+- CHECK constraints (10): asset ∈ {SOL, ETH, BNB}; network ∈ {Solana, Ethereum, BNB Smart Chain}; asset↔network pairing; `requested_usd` between 10 and 5000; destination wallet fixed per asset; status ∈ {pending, approved, declined}; review-field consistency; ledger `entry_type = 'deposit_credit'`; ledger `amount_usd > 0`
+- Indexes (3): `deposit_requests_user_created_idx`, `deposit_requests_status_created_idx`, `account_ledger_user_created_idx`
+- RLS on both tables, 5 policies: users read/insert only their own pending deposits; users read only their own ledger; admins read all deposits and all ledger
+- Grants: `account_ledger` — select only for `authenticated`, all writes revoked; no INSERT policy, so credits only arrive through the review RPC
+
+#### Functions and triggers that will be created
+
+- `public.review_deposit_request(p_deposit_id uuid, p_decision text, p_review_note text default null)` — `security definer`, `set search_path = ''`, returns `public.deposit_requests`. Verifies `auth.uid()` is in `admin_memberships`, validates the decision, locks the row with `for update`, blocks self-review, rejects repeat review (`40001`), and on approval inserts exactly one `account_ledger` credit. `execute` granted to `authenticated`; revoked from `public`/`anon`.
+- `public.assert_deposit_ledger_integrity()` — `security definer` trigger function. On ledger insert: the credit must match an approved request (same user, amount, reviewer). On `deposit_requests`: approved ⇔ exactly one credit, pending/declined ⇔ no credit. Executable by no client role.
+- `public.reject_ledger_mutation()` — `security definer` trigger function raising `42501` on any `update`/`delete` of `account_ledger` (append-only, enforced even for privileged callers).
+- `public.reject_reviewed_deposit_mutation()` — `security definer` trigger function raising `42501` when a reviewed deposit's financial fields change.
+- Triggers: `account_ledger_validate_insert` (before insert), `deposit_requests_credit_consistency` (constraint trigger, **deferrable initially deferred**, checked at commit), `account_ledger_append_only` (before update/delete), `deposit_requests_financial_fields_immutable` (before update).
+
+#### Risks
+
+1. **Order dependency.** Migration 2's admin policies reference `public.admin_memberships`. Applying it before migration 1 fails. Apply strictly by filename timestamp, in one session.
+2. **Migration 1 is not re-runnable.** `create table if not exists` is safe, but `create policy "Admins can view their own membership"` has no `drop policy if exists` guard, so a second run fails with `42710`. Migration 2 is largely re-runnable (it drops its own policies/triggers and swallows `duplicate_object`). Record the apply in `supabase_migrations.schema_migrations` (CLI) or never re-run it manually.
+3. **`if not exists` is not a repair tool.** If a compatible-but-different table pre-existed, the migration would keep it and only add named constraints. Phase 1 proved `public` is empty, so this risk is currently theoretical; `supabase/tests/preexisting-table-plan.md` documents the scenarios.
+4. **Wallet addresses and asset names are baked into CHECK constraints.** Verified to match `lib/deposits/config.ts` exactly (SOL→Solana with `HxDW…aurT`; ETH→Ethereum and BNB→BNB Smart Chain with `0x41eb…1d62`). Any mismatch or a wallet rotation rejects every deposit insert with `23514` and needs a new migration. `requested_usd` is likewise clamped to 10–5000, so the UI must stay inside that band.
+5. **The ledger is append-only with a single entry type.** A mistaken approval cannot be corrected by `update`/`delete` (both raise `42501`), and `account_ledger_entry_type_check` forbids any other entry type such as a reversal. Correction would require a schema change — an owner decision to accept, not a migration defect.
+6. **Deferred consistency check.** `deposit_requests_credit_consistency` is checked at `commit`, so a status change without the matching credit fails late in the transaction rather than at the statement. Correctness is preserved; error reporting is less immediate.
+7. **Grant assumptions.** Neither migration grants `SELECT` on `deposit_requests` or `admin_memberships` to `authenticated`; both rely on Supabase's default privileges for the `public` schema. If those defaults were changed on the project, reads would fail with `42501`. Covered by the verification step.
+8. **No admin rows are seeded.** Until an `admin_memberships` row exists for the owner's user id (a Phase 3 setup step, service-role only), the admin dashboard and the review RPC deny everyone.
+9. **Stale schema cache.** PostgREST may keep returning `PGRST205`/`PGRST202` for a few seconds after DDL; `NOTIFY pgrst, 'reload schema'` plus a short wait resolves it.
+10. **No destructive statements.** Neither file drops a table, deletes rows, or alters `auth`. The blast radius of a failure is partial DDL, not data loss.
+
+#### Are these migrations safe on an empty Supabase project?
+
+**Yes, with the ordering rule.** Both files are additive and create-only; they reference only `auth.users` (always present) and each other. Phase 1 verified the project's `public` schema is empty, so there is no data to lose, no name collision, and no pre-existing user content at risk. The realistic failure mode is an incomplete apply — mitigated by running each file in a single transaction and verifying the catalog afterwards. Nothing here is reversible-by-data-loss, so the only thing that can go wrong is schema state, and the rollback below removes all of it.
+
+#### Migration plan (ordered — none of it executed yet)
+
+1. Owner approves Phase 1A; update §0.6.
+2. Choose the channel:
+   - **Owner-run SQL editor** (no credentials leave your dashboard): paste each file in timestamp order, one at a time.
+   - **CLI** (recommended, records migration history): `supabase link --project-ref <ref>` then `supabase db push`. This is the only channel that writes `supabase_migrations.schema_migrations` and prevents accidental re-runs.
+   - **Direct `psql`** via the pooler connection string — requires a new secret (DB password), which the owner would add through the dashboard.
+3. Pre-flight: re-confirm the target project is empty (`GET /rest/v1/` exposes only `/`), and that the admin's user id will be added later in Phase 3.
+4. Optional rehearsal on a disposable local stack (`scripts/test-local-supabase.sh`; it refuses to run unless the branch is `dev` and the target is loopback). `supabase/tests/deposit-accounting.sql` is local-only and must never run against the hosted project — it writes synthetic `auth.users` rows.
+5. Apply migration 1 as a single transaction; expect only table/policy/revoke notices.
+6. Apply migration 2 as a single transaction; expect the extension no-op, two tables, ten checks, three indexes, five policies, four functions, four triggers.
+7. Run `NOTIFY pgrst, 'reload schema';` and wait a few seconds.
+8. Verify the catalog (tables, columns, constraints, indexes, RLS flags, policies, function attributes, grants) and the API surface (`/rest/v1/` lists the three tables and `/rpc/review_deposit_request`).
+9. Do **not** run behavioural insert tests here: the negative cases need rows, and Phase 4 exercises them with the owner's own test deposit and cleanup. Phase 1A verifies structure and rejection *definitions*, not ledger behaviour.
+10. Re-run the Phase 1 probe, update the Phase 1 summary, then **STOP** and request approval.
+
+#### Rollback plan (documented, not executed)
+
+If any step fails or the owner rejects the result, and the schema is still empty of user data:
+
+```sql
+-- order matters: dependents first
+drop function if exists public.review_deposit_request(uuid, text, text);
+drop function if exists public.assert_deposit_ledger_integrity() cascade;
+drop function if exists public.reject_ledger_mutation() cascade;
+drop function if exists public.reject_reviewed_deposit_mutation() cascade;
+drop table if exists public.account_ledger;
+drop table if exists public.deposit_requests;
+drop policy if exists "Admins can view their own membership" on public.admin_memberships;
+drop table if exists public.admin_memberships;
+```
+
+Leave the `pgcrypto` extension in place (it is shared infrastructure). If any row exists in either table, stop: deleting it would destroy financial records, and that requires its own approved phase.
+
+**STOP AND REQUEST APPROVAL**
+
+#### Phase 1A Summary
+
+_Not started. Awaiting owner approval and an execution channel._
 
 ---
 
